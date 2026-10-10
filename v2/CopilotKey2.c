@@ -7,6 +7,8 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <stdio.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
 
 #define APP_CLASS L"CopilotKeyBindingV2.Settings"
 #define SHARED_MUTEX L"Local\\CodexCopilotKeyBinding"
@@ -23,9 +25,15 @@
 #define ID_START 106
 #define ID_OPEN 107
 #define ID_STOP 108
+#define ID_CLAUDE 109
+#define ID_CHINESE 110
+#define ID_ENGLISH 111
+#define ID_MORE 112
+#define ID_BACK 113
+#define ID_PROJECT 114
 #define STOP_EVENT L"Local\\CopilotKeyBindingV2.Stop"
 
-typedef struct { BOOL claude; WCHAR executable[MAX_PATH]; } Settings;
+typedef struct { BOOL claude; WCHAR executable[MAX_PATH]; BOOL chinese; } Settings;
 typedef struct { BOOL exists; DWORD type, bytes; BYTE data[2048]; } StartupState;
 static const WCHAR codexTarget[] = L"shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App";
 static const WCHAR claudeTarget[] = L"shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude";
@@ -33,7 +41,7 @@ static WCHAR executablePath[MAX_PATH], settingsPath[MAX_PATH], configDirectory[M
 static HHOOK hook;
 static DWORD workerThread;
 static BOOL captured, startupEnabled;
-static HWND window, targetBox, pathBox, browseButton, startupButton, startButton, stopButton;
+static HWND window, targetBox, startupButton, startButton, stopButton;
 static HFONT titleFont, bodyFont, smallFont, labelFont;
 static HBRUSH backgroundBrush, whiteBrush;
 static int dpi = 96;
@@ -41,6 +49,74 @@ static WCHAR statusText[256];
 static BOOL statusError;
 static BOOL expectedWorker;
 static int transitionChecks;
+static BOOL chinese, selectedClaude, darkTheme, micaEnabled, highContrast;
+static int themePreview = -1;
+static BOOL solidPreview;
+static HWND claudeButton;
+static COLORREF foregroundColor, mutedColor, cardColor, borderColor, accentColor, baseColor;
+static HTHEME textTheme;
+
+typedef enum {
+    TX_TITLE, TX_SUBTITLE, TX_TARGET, TX_PATH, TX_PATH_HINT, TX_STARTUP, TX_STARTUP_HINT,
+    TX_BROWSE, TX_OPEN, TX_STOP, TX_START, TX_SAVE, TX_WINDOW,
+    TX_LEGACY, TX_ACTIVE, TX_STOPPED, TX_INVALID_PATH, TX_LEGACY_STARTUP,
+    TX_SAVE_FAILED, TX_STARTUP_FAILED, TX_ROLLBACK_OK, TX_ROLLBACK_FAILED,
+    TX_SAVED_LEGACY, TX_SAVED, TX_LAUNCHED, TX_LAUNCH_FAILED, TX_START_FAILED,
+    TX_START_REQUESTED, TX_STOP_REQUESTED, TX_LANGUAGE_FAILED,
+    TX_MORE, TX_LANGUAGE, TX_VERSION, TX_PROJECT, TX_BACK, TX_LINK_FAILED, TX_SAVE_DONE, TX_COUNT
+} TextId;
+static TextId currentStatus = TX_STOPPED;
+static const WCHAR *const messages[2][TX_COUNT] = {
+    {
+        L"Copilot key", L"Choose what your key opens.", L"Open with",
+        L"Claude executable (optional)", L"Leave blank to use the packaged app.",
+        L"Run at sign-in", L"Keep the mapper running in the background",
+        L"Browse", L"Open app", L"Stop", L"Start mapping", L"Save", L"Copilot Key Binding",
+        L"",
+        L"Mapping is running. Saved target changes apply on the next key press.",
+        L"Mapping is stopped. Save your settings, then start when ready.",
+        L"Choose an existing Claude .exe, or leave the path blank for the packaged app.",
+        L"Another mapper is running. Stop it and disable its startup entry before enabling startup here.",
+        L"Could not save settings. Check access to your settings folder and startup entry.",
+        L"Could not change startup. The target setting has not been saved.",
+        L"Could not save the target. The previous startup setting was restored.",
+        L"Saving and startup rollback failed. Check Windows Startup Apps.",
+        L"Settings saved. 1.0 is still running with its original mapping.",
+        L"Settings saved. Closing this window leaves the mapper running.",
+        L"Launch request sent. Check that the selected app opened.",
+        L"Could not launch the app. Check the executable path or installation.",
+        L"Could not start the background mapper.",
+        L"Starting the mapper. You can close this window once it is running.",
+        L"Stopping the mapper. The startup setting is unchanged.",
+        L"Could not save the language selection.",
+        L"More", L"Language", L"Version", L"GitHub project ↗", L"Back", L"Could not open the project page.", L"Saved"
+    },
+    {
+        L"Copilot 按键", L"选择按下按键后打开的应用。", L"打开应用",
+        L"Claude 程序路径（可选）", L"使用打包安装的 Claude 时留空即可。",
+        L"开机自启动", L"登录 Windows 后在后台运行映射程序",
+        L"浏览", L"打开应用", L"停止", L"启动映射", L"保存", L"Copilot 按键设置",
+        L"",
+        L"映射正在运行。保存后，下次按键将使用新的应用选择。",
+        L"映射尚未运行。请先保存设置，再按需启动。",
+        L"请选择存在的 Claude .exe 文件；使用打包安装版本时可留空。",
+        L"另一映射程序正在运行，请先关闭它并停用其开机启动。",
+        L"无法保存设置，请检查设置文件夹和启动项的访问权限。",
+        L"无法更改启动项，应用选择尚未保存。",
+        L"无法保存应用选择，已恢复原来的启动设置。",
+        L"保存和启动项恢复均失败，请检查 Windows 启动应用设置。",
+        L"设置已保存。1.0 仍使用原有映射运行。",
+        L"设置已保存，关闭窗口不会停止后台映射。",
+        L"已发送启动请求，请确认所选应用已打开。",
+        L"无法启动应用，请检查程序路径或安装情况。",
+        L"无法启动后台映射程序。",
+        L"正在启动映射，启动后可以关闭此窗口。",
+        L"正在停止映射，开机启动设置保持不变。",
+        L"无法保存语言选择。",
+        L"更多", L"界面语言", L"版本", L"GitHub 项目 ↗", L"返回", L"无法打开项目页面。", L"已保存"
+    }
+};
+static const WCHAR *tr(TextId id) { return messages[chinese ? 1 : 0][id]; }
 
 static int px(int value) { return MulDiv(value, dpi, 96); }
 static BOOL mutexExists(const WCHAR *name)
@@ -80,6 +156,8 @@ static Settings loadSettings(const WCHAR *path)
     GetPrivateProfileStringW(L"Mapping", L"Target", L"Codex", name, 24, path);
     settings.claude = lstrcmpiW(name, L"Claude") == 0;
     GetPrivateProfileStringW(L"Mapping", L"ClaudeExecutable", L"", settings.executable, MAX_PATH, path);
+    GetPrivateProfileStringW(L"Interface", L"Language", L"", name, 24, path);
+    settings.chinese = name[0] ? lstrcmpiW(name, L"zh-CN") == 0 : PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
     return settings;
 }
 static BOOL saveSettings(const WCHAR *path, const Settings *settings)
@@ -96,17 +174,25 @@ static BOOL saveSettings(const WCHAR *path, const Settings *settings)
     CloseHandle(file);
     if (!headerSaved) { DeleteFileW(temporary); return FALSE; }
     if (!WritePrivateProfileStringW(L"Mapping", L"Target", settings->claude ? L"Claude" : L"Codex", temporary) ||
-        !WritePrivateProfileStringW(L"Mapping", L"ClaudeExecutable", settings->executable, temporary)) {
+        !WritePrivateProfileStringW(L"Mapping", L"ClaudeExecutable", settings->executable, temporary) ||
+        !WritePrivateProfileStringW(L"Interface", L"Language", settings->chinese ? L"zh-CN" : L"en", temporary)) {
         DeleteFileW(temporary);
         return FALSE;
     }
     WritePrivateProfileStringW(NULL, NULL, NULL, temporary);
-    if (!MoveFileExW(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    /* Packaged hosts may redirect the paths onto different storage volumes. */
+    if (!MoveFileExW(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH | MOVEFILE_COPY_ALLOWED)) {
         DeleteFileW(temporary);
         return FALSE;
     }
     WritePrivateProfileStringW(NULL, NULL, NULL, path);
     return TRUE;
+}
+static BOOL saveLanguage(const WCHAR *path, BOOL useChinese)
+{
+    Settings existing = loadSettings(path);
+    existing.chinese = useChinese;
+    return saveSettings(path, &existing);
 }
 static LONG snapshotStartup(const WCHAR *keyPath, StartupState *state)
 {
@@ -162,20 +248,10 @@ static BOOL createProcess(const WCHAR *application, WCHAR *command)
 static BOOL launch(const Settings *settings)
 {
     WCHAR application[MAX_PATH], command[MAX_PATH + 160];
-    if (settings->claude && settings->executable[0]) {
-        DWORD attributes = GetFileAttributesW(settings->executable);
-        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            SetLastError(ERROR_FILE_NOT_FOUND);
-            return FALSE;
-        }
-        lstrcpyW(application, settings->executable);
-        wsprintfW(command, L"\"%s\"", application);
-    } else {
-        UINT count = GetWindowsDirectoryW(application, MAX_PATH);
-        if (!count || count + 14 >= MAX_PATH) return FALSE;
-        lstrcatW(application, L"\\explorer.exe");
-        wsprintfW(command, L"\"%s\" %s", application, settings->claude ? claudeTarget : codexTarget);
-    }
+    UINT count = GetWindowsDirectoryW(application, MAX_PATH);
+    if (!count || count + 14 >= MAX_PATH) return FALSE;
+    lstrcatW(application, L"\\explorer.exe");
+    wsprintfW(command, L"\"%s\" %s", application, settings->claude ? claudeTarget : codexTarget);
     return createProcess(application, command);
 }
 static void workerLog(const char *event)
@@ -257,9 +333,10 @@ static int runWorker(HINSTANCE instance)
     return result;
 }
 
-static void setStatus(const WCHAR *text, BOOL error)
+static void setStatus(TextId id, BOOL error)
 {
-    lstrcpynW(statusText, text, 256);
+    currentStatus = id;
+    lstrcpynW(statusText, tr(id), 256);
     statusError = error;
     InvalidateRect(window, NULL, FALSE);
 }
@@ -268,275 +345,42 @@ static void refreshStatus(void)
     BOOL legacy = legacyRunning(), active = mutexExists(V2_MUTEX);
     EnableWindow(startButton, !legacy && !active);
     EnableWindow(stopButton, active);
-    if (legacy) setStatus(L"Version 1.0 is running. This window only configures 2.0; the current mapping stays active.", FALSE);
-    else if (active) setStatus(L"Version 2.0 mapping is running. Saved target changes apply on the next key press.", FALSE);
-    else setStatus(L"Version 2.0 mapping is stopped. Save your settings, then start mapping when ready.", FALSE);
+    if (legacy) setStatus(TX_LEGACY, FALSE);
+    else if (active) setStatus(TX_ACTIVE, FALSE);
+    else setStatus(TX_STOPPED, FALSE);
 }
 static Settings selectedSettings(void)
 {
-    Settings settings = {0};
-    settings.claude = SendMessageW(targetBox, CB_GETCURSEL, 0, 0) == 1;
-    GetWindowTextW(pathBox, settings.executable, MAX_PATH);
+    Settings settings = loadSettings(settingsPath);
+    settings.claude = selectedClaude;
+    settings.chinese = chinese;
     return settings;
-}
-static void refreshTarget(void)
-{
-    BOOL claude = SendMessageW(targetBox, CB_GETCURSEL, 0, 0) == 1;
-    EnableWindow(pathBox, claude);
-    EnableWindow(browseButton, claude);
 }
 static BOOL applySettings(void)
 {
     Settings settings = selectedSettings();
-    if (settings.claude && settings.executable[0]) {
-        DWORD attributes = GetFileAttributesW(settings.executable);
-        int length = lstrlenW(settings.executable);
-        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) ||
-            length < 4 || lstrcmpiW(settings.executable + length - 4, L".exe") != 0) {
-            setStatus(L"Choose an existing Claude .exe, or leave the path blank for the packaged app.", TRUE);
-            return FALSE;
-        }
-    }
     if (startupEnabled && legacyRunning()) {
-        setStatus(L"Keep 1.0 as your startup version for now. Stop it and remove its startup shortcut before enabling 2.0 at sign-in.", TRUE);
+        setStatus(TX_LEGACY_STARTUP, TRUE);
         return FALSE;
     }
     StartupState before;
     if (snapshotStartup(STARTUP_KEY, &before) != ERROR_SUCCESS || !ensureConfigDirectory()) {
-        setStatus(L"Settings could not be saved. Check access to your user settings folder and startup entry.", TRUE);
+        setStatus(TX_SAVE_FAILED, TRUE);
         return FALSE;
     }
     if (setStartup(STARTUP_KEY, startupEnabled) != ERROR_SUCCESS) {
-        setStatus(L"The startup setting could not be changed. No target settings were saved.", TRUE);
+        setStatus(TX_STARTUP_FAILED, TRUE);
         return FALSE;
     }
     if (!saveSettings(settingsPath, &settings)) {
         LONG rollback = restoreStartup(STARTUP_KEY, &before);
-        setStatus(rollback == ERROR_SUCCESS ? L"The target could not be saved. The previous startup setting was restored." :
-            L"Saving failed and the startup setting could not be restored. Check Windows Startup Apps.", TRUE);
+        setStatus(rollback == ERROR_SUCCESS ? TX_ROLLBACK_OK : TX_ROLLBACK_FAILED, TRUE);
         return FALSE;
     }
-    setStatus(legacyRunning() ? L"2.0 settings saved. Version 1.0 is still running and has not been changed." :
-        L"Settings saved. Closing this window does not stop the background mapper.", FALSE);
+    setStatus(legacyRunning() ? TX_SAVED_LEGACY : TX_SAVED, FALSE);
     return TRUE;
 }
-static void browseExecutable(void)
-{
-    WCHAR path[MAX_PATH] = L"";
-    OPENFILENAMEW dialog = {0};
-    dialog.lStructSize = sizeof(dialog);
-    dialog.hwndOwner = window;
-    dialog.lpstrFilter = L"Applications (*.exe)\0*.exe\0\0";
-    dialog.lpstrFile = path;
-    dialog.nMaxFile = MAX_PATH;
-    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    dialog.lpstrTitle = L"Choose Claude executable";
-    if (GetOpenFileNameW(&dialog)) SetWindowTextW(pathBox, path);
-}
-static HWND control(const WCHAR *kind, const WCHAR *text, DWORD style, int x, int y, int width, int height, int id)
-{
-    HWND child = CreateWindowExW(kind[0] == L'E' ? WS_EX_CLIENTEDGE : 0, kind, text,
-        WS_CHILD | WS_VISIBLE | style, px(x), px(y), px(width), px(height), window,
-        (HMENU)(INT_PTR)id, GetModuleHandleW(NULL), NULL);
-    SendMessageW(child, WM_SETFONT, (WPARAM)bodyFont, TRUE);
-    return child;
-}
-static void drawText(HDC dc, const WCHAR *text, int x, int y, int width, int height, HFONT font, COLORREF color)
-{
-    RECT rectangle = {px(x), px(y), px(x + width), px(y + height)};
-    SelectObject(dc, font);
-    SetTextColor(dc, color);
-    SetBkMode(dc, TRANSPARENT);
-    DrawTextW(dc, text, -1, &rectangle, DT_LEFT | DT_WORDBREAK | DT_NOPREFIX);
-}
-static void paintButton(DRAWITEMSTRUCT *item)
-{
-    HDC dc = item->hDC;
-    RECT r = item->rcItem;
-    BOOL disabled = (item->itemState & ODS_DISABLED) != 0;
-    BOOL pressed = (item->itemState & ODS_SELECTED) != 0;
-    if (item->CtlID == ID_STARTUP) {
-        FillRect(dc, &r, backgroundBrush);
-        int w = r.right - r.left, h = r.bottom - r.top;
-        HBRUSH fill = CreateSolidBrush(startupEnabled ? RGB(41, 97, 225) : RGB(192, 199, 211));
-        HGDIOBJ oldBrush = SelectObject(dc, fill), oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
-        RoundRect(dc, 2, (h - px(24)) / 2, w - 2, (h + px(24)) / 2, px(24), px(24));
-        SelectObject(dc, whiteBrush);
-        int left = startupEnabled ? w - px(23) : px(5), top = (h - px(18)) / 2;
-        Ellipse(dc, left, top, left + px(18), top + px(18));
-        SelectObject(dc, oldBrush); SelectObject(dc, oldPen); DeleteObject(fill);
-    } else {
-        BOOL primary = item->CtlID == ID_SAVE;
-        COLORREF color = disabled ? RGB(232, 235, 240) : primary ? (pressed ? RGB(25, 65, 160) : RGB(41, 97, 225)) :
-            (pressed ? RGB(224, 228, 236) : RGB(255, 255, 255));
-        HBRUSH fill = CreateSolidBrush(color);
-        HPEN border = CreatePen(PS_SOLID, 1, primary ? color : RGB(210, 216, 226));
-        HGDIOBJ oldBrush = SelectObject(dc, fill), oldPen = SelectObject(dc, border);
-        RoundRect(dc, r.left, r.top, r.right, r.bottom, px(10), px(10));
-        WCHAR text[48];
-        GetWindowTextW(item->hwndItem, text, 48);
-        SelectObject(dc, bodyFont);
-        SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, disabled ? RGB(150, 158, 173) : primary ? RGB(255, 255, 255) : RGB(39, 49, 65));
-        DrawTextW(dc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(dc, oldBrush); SelectObject(dc, oldPen); DeleteObject(fill); DeleteObject(border);
-    }
-    if (item->itemState & ODS_FOCUS) { InflateRect(&r, -px(4), -px(4)); DrawFocusRect(dc, &r); }
-}
-static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message) {
-    case WM_CREATE: {
-        window = hwnd;
-        Settings settings = loadSettings(settingsPath);
-        StartupState startup;
-        startupEnabled = snapshotStartup(STARTUP_KEY, &startup) == ERROR_SUCCESS && startup.exists;
-        targetBox = control(L"COMBOBOX", L"Open application", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, 24, 112, 428, 160, ID_TARGET);
-        SendMessageW(targetBox, CB_ADDSTRING, 0, (LPARAM)L"Codex");
-        SendMessageW(targetBox, CB_ADDSTRING, 0, (LPARAM)L"Claude");
-        SendMessageW(targetBox, CB_SETCURSEL, settings.claude ? 1 : 0, 0);
-        SendMessageW(targetBox, CB_SETITEMHEIGHT, (WPARAM)-1, px(24));
-        pathBox = control(L"EDIT", settings.executable, ES_AUTOHSCROLL | WS_TABSTOP, 24, 172, 338, 30, ID_PATH);
-        SendMessageW(pathBox, EM_SETLIMITTEXT, MAX_PATH - 1, 0);
-        browseButton = control(L"BUTTON", L"Browse", BS_OWNERDRAW | WS_TABSTOP, 372, 172, 80, 30, ID_BROWSE);
-        startupButton = control(L"BUTTON", L"Run at sign-in", BS_OWNERDRAW | WS_TABSTOP, 404, 246, 48, 30, ID_STARTUP);
-        control(L"BUTTON", L"Open app", BS_OWNERDRAW | WS_TABSTOP, 24, 388, 90, 34, ID_OPEN);
-        stopButton = control(L"BUTTON", L"Stop", BS_OWNERDRAW | WS_TABSTOP, 124, 388, 62, 34, ID_STOP);
-        startButton = control(L"BUTTON", L"Start mapping", BS_OWNERDRAW | WS_TABSTOP, 196, 388, 126, 34, ID_START);
-        control(L"BUTTON", L"Save", BS_OWNERDRAW | WS_TABSTOP, 332, 388, 120, 34, ID_SAVE);
-        refreshTarget(); refreshStatus();
-        return 0;
-    }
-    case WM_ACTIVATE:
-        if (LOWORD(wParam) != WA_INACTIVE && targetBox) refreshStatus();
-        return 0;
-    case WM_COMMAND:
-        if (LOWORD(wParam) == ID_TARGET && HIWORD(wParam) == CBN_SELCHANGE) { refreshTarget(); return 0; }
-        switch (LOWORD(wParam)) {
-        case ID_BROWSE: browseExecutable(); return 0;
-        case ID_STARTUP: startupEnabled = !startupEnabled; InvalidateRect(startupButton, NULL, FALSE); return 0;
-        case ID_SAVE: applySettings(); return 0;
-        case ID_OPEN: {
-            Settings settings = selectedSettings();
-            BOOL launched = launch(&settings);
-            setStatus(launched ? L"Launch request sent. Check that the selected app opened." :
-                L"The app could not be launched. Check the executable path or app installation.", !launched);
-            return 0;
-        }
-        case ID_START: {
-            if (legacyRunning()) { refreshStatus(); return 0; }
-            if (!applySettings()) return 0;
-            WCHAR command[MAX_PATH + 32];
-            wsprintfW(command, L"\"%s\" --background", executablePath);
-            if (!createProcess(executablePath, command)) setStatus(L"The background mapper could not start.", TRUE);
-            else {
-                EnableWindow(startButton, FALSE);
-                expectedWorker = TRUE; transitionChecks = 10;
-                SetTimer(window, 1, 150, NULL);
-                setStatus(L"Start requested. Version 2.0 will remain in the background after this window closes.", FALSE);
-            }
-            return 0;
-        }
-        case ID_STOP: {
-            HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, STOP_EVENT);
-            if (event) {
-                SetEvent(event); CloseHandle(event);
-                expectedWorker = FALSE; transitionChecks = 10;
-                SetTimer(window, 1, 150, NULL);
-                setStatus(L"Stop requested for version 2.0. The startup setting is unchanged.", FALSE);
-            }
-            else refreshStatus();
-            return 0;
-        }
-        }
-        break;
-    case WM_TIMER:
-        if (wParam == 1 && (mutexExists(V2_MUTEX) == expectedWorker || --transitionChecks <= 0)) {
-            KillTimer(window, 1);
-            refreshStatus();
-        }
-        return 0;
-    case WM_DRAWITEM: paintButton((DRAWITEMSTRUCT *)lParam); return TRUE;
-    case WM_CTLCOLORLISTBOX:
-    case WM_CTLCOLOREDIT:
-        SetBkColor((HDC)wParam, RGB(255, 255, 255));
-        return (LRESULT)whiteBrush;
-    case WM_PAINT: {
-        PAINTSTRUCT paint;
-        HDC dc = BeginPaint(hwnd, &paint);
-        RECT client;
-        GetClientRect(hwnd, &client);
-        FillRect(dc, &client, backgroundBrush);
-        drawText(dc, L"Copilot key", 24, 22, 350, 36, titleFont, RGB(28, 36, 50));
-        drawText(dc, L"Settings  /  Version 2.0", 24, 60, 400, 22, smallFont, RGB(105, 117, 136));
-        drawText(dc, L"Open when pressed", 24, 90, 400, 22, labelFont, RGB(47, 59, 78));
-        drawText(dc, L"Claude executable (optional)", 24, 150, 400, 22, smallFont, RGB(91, 104, 123));
-        drawText(dc, L"Leave blank to use the packaged Claude app.", 24, 209, 428, 22, smallFont, RGB(119, 130, 148));
-        drawText(dc, L"Run at sign-in", 24, 245, 360, 24, labelFont, RGB(47, 59, 78));
-        drawText(dc, L"Start the 2.0 mapper in the background", 24, 270, 370, 21, smallFont, RGB(105, 117, 136));
-        RECT card = {px(24), px(306), px(452), px(371)};
-        HBRUSH fill = CreateSolidBrush(statusError ? RGB(255, 237, 237) : RGB(232, 238, 249));
-        HGDIOBJ oldBrush = SelectObject(dc, fill), oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
-        RoundRect(dc, card.left, card.top, card.right, card.bottom, px(12), px(12));
-        SelectObject(dc, oldBrush); SelectObject(dc, oldPen); DeleteObject(fill);
-        drawText(dc, statusText, 38, 316, 400, 49, smallFont, statusError ? RGB(163, 42, 47) : RGB(65, 86, 124));
-        EndPaint(hwnd, &paint);
-        return 0;
-    }
-    case WM_CLOSE: DestroyWindow(hwnd); return 0;
-    case WM_DESTROY: PostQuitMessage(0); return 0;
-    }
-    return DefWindowProcW(hwnd, message, wParam, lParam);
-}
-static int showSettings(HINSTANCE instance, int show)
-{
-    HANDLE mutex = CreateMutexW(NULL, FALSE, UI_MUTEX);
-    if (!mutex) return 1;
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND existing = FindWindowW(APP_CLASS, NULL);
-        if (existing) { ShowWindow(existing, SW_RESTORE); SetForegroundWindow(existing); }
-        CloseHandle(mutex);
-        return 0;
-    }
-    SetProcessDPIAware();
-    HDC screen = GetDC(NULL);
-    dpi = GetDeviceCaps(screen, LOGPIXELSX);
-    ReleaseDC(NULL, screen);
-    titleFont = CreateFontW(-px(27), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    bodyFont = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    smallFont = CreateFontW(-px(13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    labelFont = CreateFontW(-px(14), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    backgroundBrush = CreateSolidBrush(RGB(246, 248, 252));
-    whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
-    WNDCLASSW kind = {0};
-    kind.lpfnWndProc = windowProcedure;
-    kind.hInstance = instance;
-    kind.hCursor = LoadCursorW(NULL, IDC_ARROW);
-    kind.hIcon = LoadIconW(NULL, IDI_APPLICATION);
-    kind.hbrBackground = backgroundBrush;
-    kind.lpszClassName = APP_CLASS;
-    RegisterClassW(&kind);
-    RECT rectangle = {0, 0, px(476), px(444)};
-    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    AdjustWindowRect(&rectangle, style, FALSE);
-    window = CreateWindowExW(0, APP_CLASS, L"Copilot Key Binding 2.0", style,
-        CW_USEDEFAULT, CW_USEDEFAULT, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top,
-        NULL, NULL, instance, NULL);
-    if (!window) { CloseHandle(mutex); return 1; }
-    ShowWindow(window, show); UpdateWindow(window);
-    MSG message;
-    while (GetMessageW(&message, NULL, 0, 0) > 0) {
-        if (!IsDialogMessageW(window, &message)) { TranslateMessage(&message); DispatchMessageW(&message); }
-    }
-    DeleteObject(titleFont); DeleteObject(bodyFont); DeleteObject(smallFont); DeleteObject(labelFont);
-    DeleteObject(backgroundBrush); DeleteObject(whiteBrush);
-    CloseHandle(mutex);
-    return 0;
-}
+#include "ui.inc"
 
 static int selfTest(void)
 {
@@ -548,14 +392,25 @@ static int selfTest(void)
     int failures = 0;
     Settings original = {0};
     original.claude = TRUE;
+    original.chinese = TRUE;
     lstrcpyW(original.executable, L"C:\\Program Files\\Claude 测试\\claude.exe");
     if (!saveSettings(file, &original)) ++failures;
     Settings loaded = loadSettings(file);
-    if (!loaded.claude || lstrcmpW(original.executable, loaded.executable)) ++failures;
+    if (!loaded.claude || !loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
+    if (!saveLanguage(file, FALSE)) ++failures;
+    loaded = loadSettings(file);
+    if (!loaded.claude || loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
     original.claude = FALSE; original.executable[0] = 0;
+    original.chinese = FALSE;
     if (!saveSettings(file, &original)) ++failures;
     loaded = loadSettings(file);
-    if (loaded.claude || loaded.executable[0]) ++failures;
+    if (loaded.claude || loaded.executable[0] || loaded.chinese) ++failures;
+    if (!saveLanguage(file, TRUE)) ++failures;
+    loaded = loadSettings(file);
+    if (loaded.claude || loaded.executable[0] || !loaded.chinese) ++failures;
+    for (int language = 0; language < 2; ++language)
+        for (int text = 0; text < TX_COUNT; ++text)
+            if (!messages[language][text] || (text != TX_LEGACY && !messages[language][text][0])) ++failures;
     StartupState missing, present, removed;
     if (snapshotStartup(keyPath, &missing) != ERROR_SUCCESS || missing.exists) ++failures;
     if (setStartup(keyPath, TRUE) != ERROR_SUCCESS) ++failures;
@@ -574,11 +429,28 @@ static int selfTest(void)
     printf("Settings persistence and isolated startup registry checks: %s\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }
+static int diagnoseSettings(void)
+{
+    BOOL directory = ensureConfigDirectory();
+    DWORD directoryError = GetLastError();
+    WCHAR path[MAX_PATH];
+    wsprintfW(path, L"%s\\diagnostic-%lu.ini", configDirectory, GetCurrentProcessId());
+    Settings settings = {0};
+    BOOL saved = directory && saveSettings(path, &settings);
+    DWORD saveError = GetLastError();
+    wprintf(L"Directory=%s\nCreated=%d Error=%lu\nSaved=%d Error=%lu\n", configDirectory,
+        directory, directoryError, saved, saveError);
+    if (saved) DeleteFileW(path);
+    return saved ? 0 : 1;
+}
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, int show)
 {
     (void)previous;
     if (!preparePaths()) return 1;
     if (lstrcmpW(commandLine, L"--background") == 0) return runWorker(instance);
     if (lstrcmpW(commandLine, L"--self-test") == 0) return selfTest();
+    if (lstrcmpW(commandLine, L"--diagnose-settings") == 0) return diagnoseSettings();
+    if (lstrcmpW(commandLine, L"--preview-light") == 0) themePreview = 0;
+    if (lstrcmpW(commandLine, L"--preview-solid") == 0) solidPreview = TRUE;
     return showSettings(instance, show);
 }

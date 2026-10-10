@@ -1,8 +1,8 @@
-name: Build 2.0 preview
+name: Build 2.1 preview
 
 on:
   push:
-    branches: [version-2]
+    branches: [version-2.1]
     paths: ['v2/**', '.github/workflows/build-v2.yml']
   pull_request:
     branches: [main]
@@ -26,21 +26,26 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir -p v2/dist
-          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey2.exe v2/CopilotKey2.c -luser32 -lgdi32 -ladvapi32 -lcomdlg32
+          g++ -Os -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -c v2/drawing.cpp -o v2/dist/drawing.o
+          windres -I v2 -i v2/app.rc -o v2/dist/app.o
+          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey21.exe v2/CopilotKey2.c v2/dist/drawing.o v2/dist/app.o -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lgdiplus -lmsimg32
       - name: Check settings and startup handling
         shell: pwsh
         run: |
-          $check = Start-Process -FilePath "$PWD/v2/dist/CopilotKey2.exe" -ArgumentList '--self-test' -Wait -PassThru
+          $check = Start-Process -FilePath "$PWD/v2/dist/CopilotKey21.exe" -ArgumentList '--self-test' -Wait -PassThru
           if ($check.ExitCode -ne 0) { throw "Self-test failed: $($check.ExitCode)" }
       - name: Package
         shell: pwsh
         run: |
           Copy-Item v2/README.md v2/dist/README.md
-          $hash = (Get-FileHash v2/dist/CopilotKey2.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  CopilotKey2.exe" | Set-Content v2/dist/SHA256SUMS.txt -Encoding ascii
-          Compress-Archive -LiteralPath v2/dist/CopilotKey2.exe,v2/dist/README.md,v2/dist/SHA256SUMS.txt -DestinationPath v2/dist/CopilotKeyBinding-2.0-preview-windows-x64.zip
+          $hash = (Get-FileHash v2/dist/CopilotKey21.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  CopilotKey21.exe" | Set-Content v2/dist/SHA256SUMS.txt -Encoding ascii
+          Compress-Archive -LiteralPath v2/dist/CopilotKey21.exe,v2/dist/README.md,v2/dist/SHA256SUMS.txt -DestinationPath v2/dist/CopilotKeyBinding-2.1-preview-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: CopilotKeyBinding-2.0-preview-windows-x64
-          path: v2/dist/*
+          name: CopilotKeyBinding-2.1-preview-windows-x64
+          path: |
+            v2/dist/CopilotKey21.exe
+            v2/dist/CopilotKeyBinding-2.1-preview-windows-x64.zip
+            v2/dist/SHA256SUMS.txt
           if-no-files-found: error
