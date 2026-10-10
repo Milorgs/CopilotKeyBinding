@@ -14,6 +14,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Drawing helper compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Icon resource compilation failed.' }
 & $taskCompiler.Source -Os -s -Wall -Wextra -Werror -municode -mwindows `
     -o $taskOutput (Join-Path $PSScriptRoot 'CopilotKey2.c') (Join-Path $taskDist 'drawing.o') (Join-Path $taskDist 'app.o') `
-    -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lgdiplus -lmsimg32
+    -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lmsimg32
 if ($LASTEXITCODE -ne 0) { throw "GCC failed with exit code $LASTEXITCODE" }
 Get-FileHash -LiteralPath $taskOutput -Algorithm SHA256

@@ -7,6 +7,7 @@ extern int initDrawing(void);
 extern void closeDrawing(void);
 extern void smoothRoundRect(HDC, int, int, int, int, int, COLORREF, COLORREF, int);
 extern void smoothCircle(HDC, int, int, int, COLORREF);
+extern int testDrawing(void);
 
 static void readPalette(void)
 {

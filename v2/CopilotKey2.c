@@ -381,6 +381,7 @@ static int selfTest(void)
     wsprintfW(file, L"%sCopilotKeyV2-%lu.ini", temporary, GetCurrentProcessId());
     wsprintfW(keyPath, L"Software\\Milorgs\\CopilotKeyBindingTests-%lu", GetCurrentProcessId());
     int failures = 0;
+    if (!testDrawing()) ++failures;
     Settings original = {0};
     original.claude = TRUE;
     original.chinese = TRUE;

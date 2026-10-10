@@ -5,7 +5,7 @@ A compact settings window for the Copilot key mapper, with Codex/Claude selectio
 ## Changes in 2.1
 
 - Windows 11 Mica background and system light/dark colors.
-- Supersampled rounded controls and a smooth circular startup switch.
+- Antialiased rounded controls and a smooth circular startup switch.
 - Mouse clicks no longer add focus outlines; Tab navigation still shows keyboard focus.
 - A Copilot-key-style icon, embedded at sizes from 16 to 256 pixels.
 - Language, startup at sign-in, version information, and the GitHub link are in **More**.
@@ -47,6 +47,12 @@ The startup entry is `CopilotKeyBindingV2` under the current user's Windows `Run
 Opening settings does not enable mapping or startup. App choices take effect only after **Save**. Saved target changes apply on the next Copilot key press if the mapper is running.
 
 The background mapper waits for events. It records startup and errors in its own `status.log`, without recording ordinary keys or typed text. The settings window performs only a short status check after a start or stop request; there is no recurring idle timer.
+
+## Resource use
+
+The renderer reuses a native-resolution bitmap and samples only curved boundary pixels. It does not load GDI+ or allocate large temporary supersampled images.
+
+On one Windows PC, the main window used about 15.4 MB of working-set memory and 2.06 MB of private memory, compared with 16.7 MB and 2.76 MB before this change. Thirty forced More-page redraws used 0.17 seconds of CPU time, down from 0.59 seconds. Neither version showed an increase in CPU time during a three-second idle sample. Results vary between devices and runs.
 
 ## Build
 

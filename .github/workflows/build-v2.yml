@@ -28,7 +28,7 @@ jobs:
           mkdir -p v2/dist
           g++ -Os -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -c v2/drawing.cpp -o v2/dist/drawing.o
           windres -I v2 -i v2/app.rc -o v2/dist/app.o
-          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey21.exe v2/CopilotKey2.c v2/dist/drawing.o v2/dist/app.o -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lgdiplus -lmsimg32
+          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey21.exe v2/CopilotKey2.c v2/dist/drawing.o v2/dist/app.o -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lmsimg32
       - name: Check settings and startup handling
         shell: pwsh
         run: |
