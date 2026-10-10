@@ -1,0 +1,46 @@
+name: Build 2.0 preview
+
+on:
+  push:
+    branches: [version-2]
+    paths: ['v2/**', '.github/workflows/build-v2.yml']
+  pull_request:
+    branches: [main]
+    paths: ['v2/**', '.github/workflows/build-v2.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          mkdir -p v2/dist
+          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey2.exe v2/CopilotKey2.c -luser32 -lgdi32 -ladvapi32 -lcomdlg32
+      - name: Check settings and startup handling
+        shell: pwsh
+        run: |
+          $check = Start-Process -FilePath "$PWD/v2/dist/CopilotKey2.exe" -ArgumentList '--self-test' -Wait -PassThru
+          if ($check.ExitCode -ne 0) { throw "Self-test failed: $($check.ExitCode)" }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item v2/README.md v2/dist/README.md
+          $hash = (Get-FileHash v2/dist/CopilotKey2.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  CopilotKey2.exe" | Set-Content v2/dist/SHA256SUMS.txt -Encoding ascii
+          Compress-Archive -LiteralPath v2/dist/CopilotKey2.exe,v2/dist/README.md,v2/dist/SHA256SUMS.txt -DestinationPath v2/dist/CopilotKeyBinding-2.0-preview-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CopilotKeyBinding-2.0-preview-windows-x64
+          path: v2/dist/*
+          if-no-files-found: error

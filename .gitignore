@@ -6,3 +6,4 @@ _tools/
 backup-*/
 before-*.json
 optimization-result.json
+_local/
