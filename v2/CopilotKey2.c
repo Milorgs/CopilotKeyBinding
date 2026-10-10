@@ -41,14 +41,12 @@ static WCHAR executablePath[MAX_PATH], settingsPath[MAX_PATH], configDirectory[M
 static HHOOK hook;
 static DWORD workerThread;
 static BOOL captured, startupEnabled;
-static HWND window, targetBox, startupButton, startButton, stopButton;
+static HWND window, targetBox, startupButton;
 static HFONT titleFont, bodyFont, smallFont, labelFont;
 static HBRUSH backgroundBrush, whiteBrush;
 static int dpi = 96;
 static WCHAR statusText[256];
 static BOOL statusError;
-static BOOL expectedWorker;
-static int transitionChecks;
 static BOOL chinese, selectedClaude, darkTheme, micaEnabled, highContrast;
 static int themePreview = -1;
 static BOOL solidPreview;
@@ -340,15 +338,6 @@ static void setStatus(TextId id, BOOL error)
     statusError = error;
     InvalidateRect(window, NULL, FALSE);
 }
-static void refreshStatus(void)
-{
-    BOOL legacy = legacyRunning(), active = mutexExists(V2_MUTEX);
-    EnableWindow(startButton, !legacy && !active);
-    EnableWindow(stopButton, active);
-    if (legacy) setStatus(TX_LEGACY, FALSE);
-    else if (active) setStatus(TX_ACTIVE, FALSE);
-    else setStatus(TX_STOPPED, FALSE);
-}
 static Settings selectedSettings(void)
 {
     Settings settings = loadSettings(settingsPath);
@@ -359,25 +348,27 @@ static Settings selectedSettings(void)
 static BOOL applySettings(void)
 {
     Settings settings = selectedSettings();
-    if (startupEnabled && legacyRunning()) {
-        setStatus(TX_LEGACY_STARTUP, TRUE);
-        return FALSE;
-    }
-    StartupState before;
-    if (snapshotStartup(STARTUP_KEY, &before) != ERROR_SUCCESS || !ensureConfigDirectory()) {
+    if (!ensureConfigDirectory()) {
         setStatus(TX_SAVE_FAILED, TRUE);
         return FALSE;
     }
-    if (setStartup(STARTUP_KEY, startupEnabled) != ERROR_SUCCESS) {
-        setStatus(TX_STARTUP_FAILED, TRUE);
-        return FALSE;
-    }
     if (!saveSettings(settingsPath, &settings)) {
-        LONG rollback = restoreStartup(STARTUP_KEY, &before);
-        setStatus(rollback == ERROR_SUCCESS ? TX_ROLLBACK_OK : TX_ROLLBACK_FAILED, TRUE);
+        setStatus(TX_SAVE_FAILED, TRUE);
         return FALSE;
     }
     setStatus(legacyRunning() ? TX_SAVED_LEGACY : TX_SAVED, FALSE);
+    return TRUE;
+}
+static BOOL ensureMapper(void)
+{
+    /* Never replace an existing mapper, including the user's version 1.0. */
+    if (mutexExists(SHARED_MUTEX)) return TRUE;
+    WCHAR command[MAX_PATH + 32];
+    wsprintfW(command, L"\"%s\" --background", executablePath);
+    if (!createProcess(executablePath, command)) {
+        setStatus(TX_START_FAILED, TRUE);
+        return FALSE;
+    }
     return TRUE;
 }
 #include "ui.inc"

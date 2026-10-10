@@ -155,9 +155,6 @@ static void translateControls(void)
 {
     SetWindowTextW(window, tr(TX_WINDOW));
     SetWindowTextW(startupButton, tr(TX_STARTUP));
-    SetWindowTextW(startButton, tr(TX_START));
-    SetWindowTextW(stopButton, tr(TX_STOP));
-    SetWindowTextW(GetDlgItem(window, ID_OPEN), tr(TX_OPEN));
     SetWindowTextW(GetDlgItem(window, ID_SAVE), tr(TX_SAVE));
     SetWindowTextW(GetDlgItem(window, ID_MORE), tr(TX_MORE));
     SetWindowTextW(GetDlgItem(window, ID_BACK), tr(TX_BACK));
@@ -175,15 +172,32 @@ static void changeLanguage(BOOL useChinese)
 }
 static void showPage(BOOL showMore)
 {
-    const int mainControls[] = {ID_TARGET, ID_CLAUDE, ID_STARTUP, ID_OPEN, ID_STOP, ID_START, ID_SAVE, ID_MORE};
-    const int moreControls[] = {ID_CHINESE, ID_ENGLISH, ID_BACK, ID_PROJECT};
+    const int mainControls[] = {ID_TARGET, ID_CLAUDE, ID_SAVE, ID_MORE};
+    const int moreControls[] = {ID_CHINESE, ID_ENGLISH, ID_BACK, ID_PROJECT, ID_STARTUP};
     morePage = showMore;
     for (unsigned int i = 0; i < sizeof(mainControls) / sizeof(mainControls[0]); ++i)
         ShowWindow(GetDlgItem(window, mainControls[i]), showMore ? SW_HIDE : SW_SHOW);
     for (unsigned int i = 0; i < sizeof(moreControls) / sizeof(moreControls[0]); ++i)
         ShowWindow(GetDlgItem(window, moreControls[i]), showMore ? SW_SHOW : SW_HIDE);
+    RECT size = {0, 0, px(500), px(showMore ? 388 : 246)};
+    AdjustWindowRect(&size, (DWORD)GetWindowLongPtrW(window, GWL_STYLE), FALSE);
+    SetWindowPos(window, NULL, 0, 0, size.right - size.left, size.bottom - size.top, SWP_NOMOVE | SWP_NOZORDER);
     SetFocus(GetDlgItem(window, showMore ? ID_BACK : ID_MORE));
     InvalidateRect(window, NULL, FALSE);
+}
+static void changeStartup(void)
+{
+    BOOL enable = !startupEnabled;
+    if (enable && legacyRunning()) {
+        MessageBoxW(window, tr(TX_LEGACY_STARTUP), tr(TX_WINDOW), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (setStartup(STARTUP_KEY, enable) != ERROR_SUCCESS) {
+        MessageBoxW(window, tr(TX_STARTUP_FAILED), tr(TX_WINDOW), MB_OK | MB_ICONWARNING);
+        return;
+    }
+    startupEnabled = enable;
+    InvalidateRect(startupButton, NULL, FALSE);
 }
 static void openProject(void)
 {
@@ -199,19 +213,18 @@ static void paintContent(HDC dc, const RECT *client)
     FillRect(dc, client, compositedPaint ? (HBRUSH)GetStockObject(BLACK_BRUSH) : backgroundBrush);
     if (morePage) {
         drawText(dc, tr(TX_MORE), 76, 20, 330, 36, titleFont, foregroundColor);
-        panel(dc, 24, 112, 452, 116, cardColor, borderColor);
-        drawText(dc, tr(TX_LANGUAGE), 40, 128, 410, 24, labelFont, foregroundColor);
-        panel(dc, 24, 244, 452, 54, cardColor, borderColor);
-        drawText(dc, tr(TX_VERSION), 40, 260, 260, 24, labelFont, foregroundColor);
-        drawText(dc, L"2.1", 414, 260, 50, 24, bodyFont, mutedColor);
+        panel(dc, 24, 90, 452, 64, cardColor, borderColor);
+        drawText(dc, tr(TX_LANGUAGE), 40, 111, 180, 24, labelFont, foregroundColor);
+        panel(dc, 24, 170, 452, 74, cardColor, borderColor);
+        drawText(dc, tr(TX_STARTUP), 40, 184, 348, 24, labelFont, foregroundColor);
+        drawText(dc, tr(TX_STARTUP_HINT), 40, 213, 358, 20, smallFont, mutedColor);
+        panel(dc, 24, 260, 452, 52, cardColor, borderColor);
+        drawText(dc, tr(TX_VERSION), 40, 275, 260, 24, labelFont, foregroundColor);
+        drawText(dc, L"2.1", 414, 275, 50, 24, bodyFont, mutedColor);
         return;
     }
     drawText(dc, tr(TX_TITLE), 24, 20, 310, 36, titleFont, foregroundColor);
     drawText(dc, tr(TX_SUBTITLE), 24, 62, 430, 23, smallFont, mutedColor);
-    drawText(dc, tr(TX_TARGET), 24, 98, 430, 23, labelFont, foregroundColor);
-    panel(dc, 24, 218, 452, 74, cardColor, borderColor);
-    drawText(dc, tr(TX_STARTUP), 40, 232, 348, 24, labelFont, foregroundColor);
-    drawText(dc, tr(TX_STARTUP_HINT), 40, 261, 358, 20, smallFont, mutedColor);
 }
 static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -222,26 +235,19 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
         chinese = settings.chinese; selectedClaude = settings.claude;
         StartupState startup;
         startupEnabled = snapshotStartup(STARTUP_KEY, &startup) == ERROR_SUCCESS && startup.exists;
-        targetBox = control(L"BUTTON", L"Codex", BS_OWNERDRAW | WS_TABSTOP, 24, 126, 218, 54, ID_TARGET);
-        claudeButton = control(L"BUTTON", L"Claude", BS_OWNERDRAW | WS_TABSTOP, 258, 126, 218, 54, ID_CLAUDE);
+        targetBox = control(L"BUTTON", L"Codex", BS_OWNERDRAW | WS_TABSTOP, 24, 104, 218, 54, ID_TARGET);
+        claudeButton = control(L"BUTTON", L"Claude", BS_OWNERDRAW | WS_TABSTOP, 258, 104, 218, 54, ID_CLAUDE);
         control(L"BUTTON", tr(TX_MORE), BS_OWNERDRAW | WS_TABSTOP, 440, 24, 36, 30, ID_MORE);
         control(L"BUTTON", tr(TX_BACK), BS_OWNERDRAW | WS_TABSTOP, 24, 24, 36, 30, ID_BACK);
-        control(L"BUTTON", L"中文", BS_OWNERDRAW | WS_TABSTOP, 40, 168, 204, 36, ID_CHINESE);
-        control(L"BUTTON", L"English", BS_OWNERDRAW | WS_TABSTOP, 256, 168, 204, 36, ID_ENGLISH);
-        control(L"BUTTON", tr(TX_PROJECT), BS_OWNERDRAW | WS_TABSTOP, 24, 322, 452, 36, ID_PROJECT);
-        startupButton = control(L"BUTTON", tr(TX_STARTUP), BS_OWNERDRAW | WS_TABSTOP, 414, 234, 46, 28, ID_STARTUP);
-        control(L"BUTTON", tr(TX_OPEN), BS_OWNERDRAW | WS_TABSTOP, 24, 322, 100, 36, ID_OPEN);
-        stopButton = control(L"BUTTON", tr(TX_STOP), BS_OWNERDRAW | WS_TABSTOP, 134, 322, 62, 36, ID_STOP);
-        startButton = control(L"BUTTON", tr(TX_START), BS_OWNERDRAW | WS_TABSTOP, 206, 322, 136, 36, ID_START);
-        control(L"BUTTON", tr(TX_SAVE), BS_OWNERDRAW | WS_TABSTOP, 352, 322, 124, 36, ID_SAVE);
+        control(L"BUTTON", L"中文", BS_OWNERDRAW | WS_TABSTOP, 240, 106, 98, 32, ID_CHINESE);
+        control(L"BUTTON", L"English", BS_OWNERDRAW | WS_TABSTOP, 350, 106, 110, 32, ID_ENGLISH);
+        control(L"BUTTON", tr(TX_PROJECT), BS_OWNERDRAW | WS_TABSTOP, 24, 328, 452, 36, ID_PROJECT);
+        startupButton = control(L"BUTTON", tr(TX_STARTUP), BS_OWNERDRAW | WS_TABSTOP, 414, 186, 46, 28, ID_STARTUP);
+        control(L"BUTTON", tr(TX_SAVE), BS_OWNERDRAW | WS_TABSTOP, 24, 186, 452, 36, ID_SAVE);
         SetWindowTextW(window, tr(TX_WINDOW));
-        refreshStatus();
         showPage(FALSE);
         return 0;
     }
-    case WM_ACTIVATE:
-        if (LOWORD(wParam) != WA_INACTIVE && targetBox) refreshStatus();
-        return 0;
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case ID_MORE: showPage(TRUE); return 0;
@@ -254,48 +260,15 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
             return 0;
         case ID_CHINESE: changeLanguage(TRUE); return 0;
         case ID_ENGLISH: changeLanguage(FALSE); return 0;
-        case ID_STARTUP: startupEnabled = !startupEnabled; InvalidateRect(startupButton, NULL, FALSE); return 0;
+        case ID_STARTUP: changeStartup(); return 0;
         case ID_SAVE:
-            if (!applySettings()) MessageBoxW(window, tr(currentStatus), tr(TX_WINDOW), MB_OK | MB_ICONWARNING);
+            if (!applySettings() || !ensureMapper()) MessageBoxW(window, tr(currentStatus), tr(TX_WINDOW), MB_OK | MB_ICONWARNING);
             else { SetWindowTextW(GetDlgItem(window, ID_SAVE), tr(TX_SAVE_DONE)); SetTimer(window, 2, 1600, NULL); }
             return 0;
-        case ID_OPEN: {
-            Settings settings = selectedSettings();
-            BOOL launched = launch(&settings);
-            setStatus(launched ? TX_LAUNCHED : TX_LAUNCH_FAILED, !launched);
-            return 0;
-        }
-        case ID_START: {
-            if (legacyRunning()) { refreshStatus(); return 0; }
-            if (!applySettings()) { MessageBoxW(window, tr(currentStatus), tr(TX_WINDOW), MB_OK | MB_ICONWARNING); return 0; }
-            WCHAR command[MAX_PATH + 32];
-            wsprintfW(command, L"\"%s\" --background", executablePath);
-            if (!createProcess(executablePath, command)) setStatus(TX_START_FAILED, TRUE);
-            else {
-                EnableWindow(startButton, FALSE);
-                expectedWorker = TRUE; transitionChecks = 10;
-                SetTimer(window, 1, 150, NULL);
-                setStatus(TX_START_REQUESTED, FALSE);
-            }
-            return 0;
-        }
-        case ID_STOP: {
-            HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, STOP_EVENT);
-            if (event) {
-                SetEvent(event); CloseHandle(event);
-                expectedWorker = FALSE; transitionChecks = 10;
-                SetTimer(window, 1, 150, NULL);
-                setStatus(TX_STOP_REQUESTED, FALSE);
-            } else refreshStatus();
-            return 0;
-        }
         }
         break;
     case WM_TIMER:
         if (wParam == 2) { KillTimer(window, 2); SetWindowTextW(GetDlgItem(window, ID_SAVE), tr(TX_SAVE)); return 0; }
-        if (wParam == 1 && (mutexExists(V2_MUTEX) == expectedWorker || --transitionChecks <= 0)) {
-            KillTimer(window, 1); refreshStatus();
-        }
         return 0;
     case WM_THEMECHANGED:
     case WM_SETTINGCHANGE:
@@ -360,7 +333,7 @@ static int showSettings(HINSTANCE instance, int show)
     kind.hCursor = LoadCursorW(NULL, IDC_ARROW); kind.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1));
     kind.lpszClassName = APP_CLASS;
     RegisterClassW(&kind);
-    RECT rectangle = {0, 0, px(500), px(382)};
+    RECT rectangle = {0, 0, px(500), px(246)};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     AdjustWindowRect(&rectangle, style, FALSE);
     window = CreateWindowExW(0, APP_CLASS, L"Copilot Key Binding 2.1", style,

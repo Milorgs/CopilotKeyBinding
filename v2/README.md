@@ -8,7 +8,8 @@ A compact settings window for the Copilot key mapper, with Codex/Claude selectio
 - Supersampled rounded controls and a smooth circular startup switch.
 - Mouse clicks no longer add focus outlines; Tab navigation still shows keyboard focus.
 - A Copilot-key-style icon, embedded at sizes from 16 to 256 pixels.
-- Language selection, version information, and the GitHub link are in **More**.
+- Language, startup at sign-in, version information, and the GitHub link are in **More**.
+- The main window has two app choices and a single **Save** button.
 - The Claude executable-path field and persistent status panel have been removed.
 
 Mica requires Windows 11 build 22621 or newer. A solid background is used when the API is unavailable, transparency is disabled, or high contrast is enabled. See [Microsoft's backdrop documentation](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type).
@@ -20,15 +21,14 @@ Version 1.0 remains available for a simple background-only mapper. This preview 
 1. Extract the 2.1 download to a permanent folder.
 2. Run `CopilotKey21.exe` to open settings.
 3. Choose Codex or Claude.
-4. Set **Run at sign-in** as needed, then click **Save**.
-5. Click **Start mapping** to run the background mapper. Close the settings window when finished.
+4. Click **Save** to apply the choice. The background mapper starts if no other mapper is running.
+5. Close the settings window when finished.
 
-**Open app** checks the selected launch target without changing the Copilot key mapping or saving settings.
-**Stop** stops only the 2.x background mapper. It does not change the startup setting.
+There are no separate launch, start, or stop buttons. To stop mapping, end the background `CopilotKey21.exe` process in Task Manager.
 
-Open **More** with the `•••` button to switch languages or visit the project. Language changes are immediate and saved separately, without applying unsaved app or startup choices. The initial language follows Windows when no preference is saved.
+Open **More** with the `•••` button. Language and startup changes are saved immediately and separately from the selected app. Turning startup off affects the next sign-in, not the current background process. The initial language follows Windows when no preference is saved.
 
-If 1.0 is running, settings can be opened but the new mapper will not take over the key. Before switching versions, stop 1.0 and remove its startup shortcut yourself. Startup is blocked while another mapper is running. Version 1.0 remains the latest stable release.
+If 1.0 is running, **Save** stores the new settings but does not take over the key. Before switching versions, stop 1.0 and remove its startup shortcut yourself. Startup is blocked while another mapper is running. Version 1.0 remains the latest stable release.
 
 ## Supported apps
 
@@ -37,14 +37,14 @@ If 1.0 is running, settings can be opened but the new mapper will not take over 
 
 This version uses packaged applications only. The 2.0 preview is still available for older Claude installations that need a custom executable path.
 
-The keyboard must send `Win + Shift + F23`. The target applications must already be installed. A launch request through Explorer does not prove the app opened; use **Open app** to check your installation.
+The keyboard must send `Win + Shift + F23`. The target applications must already be installed.
 
 ## Settings
 
 Target settings are stored in `%LOCALAPPDATA%\CopilotKeyBinding\v2\settings.ini`.
 The startup entry is `CopilotKeyBindingV2` under the current user's Windows `Run` key and launches `CopilotKey21.exe --background`.
 
-Opening settings does not enable mapping or startup. App and startup choices take effect only after **Save**. Saved target changes apply on the next Copilot key press if the mapper is running.
+Opening settings does not enable mapping or startup. App choices take effect only after **Save**. Saved target changes apply on the next Copilot key press if the mapper is running.
 
 The background mapper waits for events. It records startup and errors in its own `status.log`, without recording ordinary keys or typed text. The settings window performs only a short status check after a start or stop request; there is no recurring idle timer.
 
