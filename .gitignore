@@ -1,0 +1,8 @@
+*.exe
+*.zip
+*.log
+dist/
+_tools/
+backup-*/
+before-*.json
+optimization-result.json
