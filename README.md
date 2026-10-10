@@ -1,41 +1,31 @@
 # Copilot Key Binding
 
-Open Codex with the Copilot key on Windows.
+Remap the Copilot key to Codex or Claude on Windows.
 
-Written in C using Win32. No .NET or AutoHotkey required. It runs in the background without a window or tray icon, and opens Codex when the key is released. Holding the key does not launch it repeatedly.
+## Downloads
 
-## Install
+- [2.1](https://github.com/Milorgs/CopilotKeyBinding/releases/tag/v2.1): settings window, Codex/Claude selection, startup control, and Chinese/English support.
+- [1.0](https://github.com/Milorgs/CopilotKeyBinding/releases/tag/v1.0): a small background-only mapper that opens Codex.
 
-1. Install Codex on Windows x64.
-2. Download [CopilotKey-windows-x64.zip](https://github.com/Milorgs/CopilotKeyBinding/releases/latest) and extract it to a permanent folder.
-3. Run `CopilotKey.exe`, then press the Copilot key.
+For 2.1, download `CopilotKeyBinding-2.1-windows-x64.zip`, extract it to a permanent folder, and run `CopilotKey21.exe`. Select an app and click **Save**. Language and startup settings are under **More**.
 
-The keyboard must send `Win + Shift + F23`. Other key sequences are not supported.
+For 1.0, download `CopilotKey-windows-x64.zip` and run `CopilotKey.exe`. Add a shortcut to `shell:startup` if it should run at sign-in.
 
-To run at sign-in, press `Win + R`, enter `shell:startup`, and add a shortcut to `CopilotKey.exe`.
-
-To stop it, end `CopilotKey.exe` in Task Manager. Remove the startup shortcut if you no longer want it to run at sign-in.
+The keyboard must send `Win + Shift + F23`. The target application must already be installed. Only one mapper can own the key at a time; 2.1 does not stop or replace a running 1.0 instance.
 
 ## Build
 
-Install MinGW-w64 GCC, then run:
+Install MinGW-w64 GCC/G++ and run:
 
 ```powershell
+# 2.1
+.\v2\build.ps1
+# 1.0
 .\build.ps1
-# Or specify the compiler path:
-.\build.ps1 -Compiler 'C:\mingw64\bin\gcc.exe'
 ```
 
-The executable is written to `dist/CopilotKey.exe`. The script also prints its SHA-256 hash.
+Both scripts accept `-Compiler` with the path to `gcc.exe` when it is not on PATH. Runtime dependencies are Windows system libraries only.
 
-GitHub Actions builds on pushes to `main`. Push a `v*` tag to build and publish a release.
+See [2.1 documentation](v2/README.md) for configuration details. Neither version records ordinary keys or typed text.
 
-## Notes
-
-- The target app ID is `OpenAI.Codex_2p2nqsd0c76g0!App`, set in `CopilotKey.c`. Change it and rebuild if your Codex installation uses a different ID.
-- `CopilotKey.exe --check` sends a launch request without enabling the keyboard hook. Check that Codex opens; a successful exit alone does not confirm this.
-- Only one instance runs at a time. The program waits for events instead of polling.
-- `status.log` records startup and launch or hook errors. Ordinary keys and typed text are not logged.
-- Measured working set after opening Codex: about 5.5 MB, down from about 35 MB in the earlier .NET version. Private memory was about 0.87 MB. These figures are from one Windows PC; usage varies.
-
-An independent utility, with no affiliation to OpenAI or Microsoft.
+This is an independent utility, not an OpenAI, Anthropic, or Microsoft product.

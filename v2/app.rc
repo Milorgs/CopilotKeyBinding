@@ -12,9 +12,9 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Milorgs\0"
       VALUE "FileDescription", "Copilot Key Binding\0"
-      VALUE "FileVersion", "2.1 preview\0"
+      VALUE "FileVersion", "2.1\0"
       VALUE "ProductName", "Copilot Key Binding\0"
-      VALUE "ProductVersion", "2.1 preview\0"
+      VALUE "ProductVersion", "2.1\0"
     END
   END
   BLOCK "VarFileInfo"

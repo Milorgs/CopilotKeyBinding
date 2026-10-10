@@ -1,4 +1,4 @@
-# Copilot Key Binding 2.1 preview
+# Copilot Key Binding 2.1
 
 A compact settings window for the Copilot key mapper, with Codex/Claude selection, startup control, and Chinese/English support.
 
@@ -14,7 +14,7 @@ A compact settings window for the Copilot key mapper, with Codex/Claude selectio
 
 Mica requires Windows 11 build 22621 or newer. A solid background is used when the API is unavailable, transparency is disabled, or high contrast is enabled. See [Microsoft's backdrop documentation](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type).
 
-Version 1.0 remains available for a simple background-only mapper. This preview uses a separate executable, settings folder, and startup entry.
+Version 1.0 remains available for a simple background-only mapper. Version 2.1 uses a separate executable, settings folder, and startup entry.
 
 ## Use
 
@@ -28,14 +28,14 @@ There are no separate launch, start, or stop buttons. To stop mapping, end the b
 
 Open **More** with the `•••` button. Language and startup changes are saved immediately and separately from the selected app. Turning startup off affects the next sign-in, not the current background process. The initial language follows Windows when no preference is saved.
 
-If 1.0 is running, **Save** stores the new settings but does not take over the key. Before switching versions, stop 1.0 and remove its startup shortcut yourself. Startup is blocked while another mapper is running. Version 1.0 remains the latest stable release.
+If 1.0 is running, **Save** stores the new settings but does not take over the key. Before switching versions, stop 1.0 and remove its startup shortcut yourself. Startup is blocked while another mapper is running.
 
 ## Supported apps
 
 - Codex packaged app: `OpenAI.Codex_2p2nqsd0c76g0!App`.
 - Claude packaged app: `Claude_pzs8sxrjxfjjc!Claude`.
 
-This version uses packaged applications only. The 2.0 preview is still available for older Claude installations that need a custom executable path.
+This version uses packaged applications only.
 
 The keyboard must send `Win + Shift + F23`. The target applications must already be installed.
 
