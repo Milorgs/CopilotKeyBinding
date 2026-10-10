@@ -1,58 +1,62 @@
 # Copilot Key Binding
 
-将 Windows 电脑的 Copilot 实体键映射为打开 Codex。使用原生 Win32 C 实现，无需 .NET 或 AutoHotkey。
+I wanted the Copilot key on my Windows PC to open Codex, so I made this small utility to give the key a use that fits my workflow.
 
-## 功能
+The first version used .NET and WinForms. I later switched it to native Win32 C to reduce its background memory use. It runs without .NET or AutoHotkey.
 
-- 拦截 `Win + Shift + F23`，松开时打开 Codex。
-- 事件驱动，无定时轮询；应用启动在键盘钩子返回后执行。
-- 单实例运行，长按不会反复启动。
-- 无常驻窗口和托盘图标。
-- 日志只记录程序启动和错误，不记录普通按键或输入文字。
+## What it does
 
-## 使用
+- Captures `Win + Shift + F23` and opens Codex when I release the key.
+- Waits for keyboard events without polling and launches the app outside the keyboard hook.
+- Runs as a single instance; holding the key does not repeatedly launch Codex.
+- Runs without a window or tray icon.
+- Logs startup and errors only, without recording ordinary keys or typed text.
 
-1. 在 Windows x64 上安装 Codex。
-2. 下载发布版本中的 `CopilotKey.exe`，放到一个固定目录。
-3. 双击运行，再按 Copilot 键。
+## Getting started
 
-程序面向发送 `Win + Shift + F23` 的 Copilot 键。其他键盘信号不在当前版本支持范围内。
-默认打开 Microsoft Store 应用标识 `OpenAI.Codex_2p2nqsd0c76g0!App`。
-如果该标识在应用更新后变化，需要修改源码里的 `target` 并重新构建。
+1. Install Codex on Windows x64.
+2. Download `CopilotKey-windows-x64.zip` from [Releases](https://github.com/Milorgs/CopilotKeyBinding/releases) and extract it to a permanent folder.
+3. Run `CopilotKey.exe`, then press the Copilot key.
 
-### 登录后自动运行
+I built this for keyboards whose Copilot key sends `Win + Shift + F23`. Other key sequences are not supported by this version.
 
-按 `Win + R`，输入 `shell:startup`，把 `CopilotKey.exe` 的快捷方式放入打开的文件夹。
+The current launch target is the Microsoft Store app ID `OpenAI.Codex_2p2nqsd0c76g0!App`. If that ID changes in a future app update, update `target` in the source and rebuild.
 
-### 停用
+### Start automatically when signing in
 
-在任务管理器中结束 `CopilotKey.exe`；如已设为自动运行，同时删除启动文件夹里的快捷方式。
+Press `Win + R`, enter `shell:startup`, and place a shortcut to `CopilotKey.exe` in the folder that opens.
 
-### 排查启动问题
+### Stop the mapper
 
-运行 `CopilotKey.exe --check` 可以直接请求打开 Codex，而不安装键盘钩子。
-此命令成功只表示启动请求已发出；仍需确认 Codex 窗口是否出现。
-运行目录里的 `status.log` 会记录 `READY_NATIVE`、`HOOK_FAILED_NATIVE` 或 `LAUNCH_ERROR_NATIVE`。
+End `CopilotKey.exe` in Task Manager. If you added a startup shortcut, remove it to prevent the mapper from starting at your next sign-in.
 
-## 构建
+### Troubleshooting
 
-Windows 上安装 MinGW-w64 GCC，然后在 PowerShell 中执行：
+Run `CopilotKey.exe --check` to request a Codex launch without installing the keyboard hook. A successful exit means the launch request was sent; check that Codex actually opens.
+
+The `status.log` file beside the executable records `READY_NATIVE`, `HOOK_FAILED_NATIVE`, or `LAUNCH_ERROR_NATIVE`.
+
+## Building from source
+
+Install MinGW-w64 GCC on Windows, then run this in PowerShell:
 
 ```powershell
 .\build.ps1
-# GCC 不在 PATH 时：
-.\build.ps1 -Compiler 'D:\Program Files\mingw64\bin\gcc.exe'
+# If GCC is not on PATH, pass its location:
+.\build.ps1 -Compiler 'C:\mingw64\bin\gcc.exe'
 ```
 
-输出为 `dist/CopilotKey.exe`，构建脚本同时输出 SHA-256。
-GitHub Actions 会在提交后构建 Windows x64 可执行文件；推送 `v*` 标签时创建包含可执行文件的 Release。
+The script produces `dist/CopilotKey.exe` and prints its SHA-256 hash.
+GitHub Actions builds a Windows x64 executable on pushes to `main`. Pushing a `v*` tag also publishes a release with the executable.
 
-## 占用
+## Memory use on my PC
 
-在开发者的一台 Windows 电脑上，启动 Codex 后的工作集约 5.5 MB，私有内存约 0.87 MB。
-原 .NET/WinForms 版本工作集约 35 MB。空闲 3 秒观察期内没有测到 CPU 时间增加。
-这些是单机测量值，不保证其他设备占用相同。
+After launching Codex, I measured a working set of about **5.5 MB** and private memory of about **0.87 MB**. The earlier .NET/WinForms version used about **35 MB** of working-set memory.
 
-## 说明
+I also observed no increase in CPU time during a three-second idle sample. These measurements come from my own Windows PC; usage can differ on other devices.
 
-这是独立的快捷键工具，不是 OpenAI 或 Microsoft 官方产品。
+## About this project
+
+This is my personal shortcut utility. It is not an official OpenAI or Microsoft product.
+
+— Milorgs
