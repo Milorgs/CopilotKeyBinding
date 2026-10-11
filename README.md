@@ -7,7 +7,7 @@ Remap the Copilot key to Codex or Claude on Windows.
 - [2.1](https://github.com/Milorgs/CopilotKeyBinding/releases/tag/v2.1): settings window, Codex/Claude selection, startup control, and Chinese/English support.
 - [1.0](https://github.com/Milorgs/CopilotKeyBinding/releases/tag/v1.0): a small background-only mapper that opens Codex.
 
-For 2.1, download `CopilotKeyBinding-2.1-windows-x64.zip`, extract it to a permanent folder, and run `CopilotKey21.exe`. Select an app and click **Save**. Language and startup settings are under **More**.
+For 2.1, download [CopilotKey21.exe](https://github.com/Milorgs/CopilotKeyBinding/releases/download/v2.1/CopilotKey21.exe), keep it in a permanent folder, and run it. No installation, extraction, or companion files are needed. Select an app and click **Save**. Language and startup settings are under **More**.
 
 For 1.0, download `CopilotKey-windows-x64.zip` and run `CopilotKey.exe`. Add a shortcut to `shell:startup` if it should run at sign-in.
 

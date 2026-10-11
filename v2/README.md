@@ -18,11 +18,13 @@ Version 1.0 remains available for a simple background-only mapper. Version 2.1 u
 
 ## Use
 
-1. Extract the 2.1 download to a permanent folder.
+1. Download `CopilotKey21.exe` and keep it in a permanent folder.
 2. Run `CopilotKey21.exe` to open settings.
 3. Choose Codex or Claude.
 4. Click **Save** to apply the choice. The background mapper starts if no other mapper is running.
 5. Close the settings window when finished.
+
+The EXE contains the settings window, background mapper, icons, and both languages. No installer, companion DLL, icon file, or runtime download is required. Settings and the status log are created automatically in your user profile; the EXE folder does not need to be writable. Keep the EXE at the same location after enabling startup. If you move it, open it at the new location and turn startup off and on again.
 
 There are no separate launch, start, or stop buttons. To stop mapping, end the background `CopilotKey21.exe` process in Task Manager.
 
