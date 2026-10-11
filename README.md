@@ -13,12 +13,16 @@ For 1.0, download `CopilotKey-windows-x64.zip` and run `CopilotKey.exe`. Add a s
 
 The keyboard must send `Win + Shift + F23`. The target application must already be installed. Only one mapper can own the key at a time; 2.1 does not stop or replace a running 1.0 instance.
 
+## Version 2.2 development
+
+Adds System, Light, and Dark appearance choices and a manual update check under **More**. The standalone EXE keeps the existing settings and app selection. Published 2.1 downloads remain available above.
+
 ## Build
 
 Install MinGW-w64 GCC/G++ and run:
 
 ```powershell
-# 2.1
+# 2.2 development build (v2/dist/CopilotKey22.exe)
 .\v2\build.ps1
 # 1.0
 .\build.ps1
@@ -26,6 +30,6 @@ Install MinGW-w64 GCC/G++ and run:
 
 Both scripts accept `-Compiler` with the path to `gcc.exe` when it is not on PATH. Runtime dependencies are Windows system libraries only.
 
-See [2.1 documentation](v2/README.md) for configuration details. Neither version records ordinary keys or typed text.
+See [current development documentation](v2/README.md) for configuration details. Neither version records ordinary keys or typed text.
 
 This is an independent utility, not an OpenAI, Anthropic, or Microsoft product.

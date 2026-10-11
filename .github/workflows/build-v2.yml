@@ -1,8 +1,8 @@
-name: Build 2.1
+name: Build 2.2
 
 on:
   push:
-    branches: [main, version-2.1]
+    branches: [main, version-2.2]
     paths: ['v2/**', '.github/workflows/build-v2.yml']
   pull_request:
     branches: [main]
@@ -28,20 +28,20 @@ jobs:
           mkdir -p v2/dist
           g++ -Os -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -c v2/drawing.cpp -o v2/dist/drawing.o
           windres -I v2 -i v2/app.rc -o v2/dist/app.o
-          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey21.exe v2/CopilotKey2.c v2/dist/drawing.o v2/dist/app.o -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lmsimg32
+          gcc -Os -s -Wall -Wextra -Werror -municode -mwindows -o v2/dist/CopilotKey22.exe v2/CopilotKey2.c v2/dist/drawing.o v2/dist/app.o -luser32 -lgdi32 -ladvapi32 -ldwmapi -luxtheme -lmsimg32 -lwinhttp
       - name: Check settings and startup handling
         shell: pwsh
         run: |
-          $check = Start-Process -FilePath "$PWD/v2/dist/CopilotKey21.exe" -ArgumentList '--self-test' -Wait -PassThru
+          $check = Start-Process -FilePath "$PWD/v2/dist/CopilotKey22.exe" -ArgumentList '--self-test' -Wait -PassThru
           if ($check.ExitCode -ne 0) { throw "Self-test failed: $($check.ExitCode)" }
       - name: Record executable checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash v2/dist/CopilotKey21.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  CopilotKey21.exe" | Set-Content v2/dist/SHA256SUMS.txt -Encoding ascii
+          $hash = (Get-FileHash v2/dist/CopilotKey22.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  CopilotKey22.exe" | Set-Content v2/dist/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: CopilotKeyBinding-2.1-windows-x64
+          name: CopilotKeyBinding-2.2-windows-x64
           path: |
-            v2/dist/CopilotKey21.exe
+            v2/dist/CopilotKey22.exe
           if-no-files-found: error

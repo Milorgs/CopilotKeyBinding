@@ -9,6 +9,11 @@
 #include <stdio.h>
 #include <dwmapi.h>
 #include <uxtheme.h>
+#include <winhttp.h>
+#include <stdlib.h>
+#include <ctype.h>
+#define APP_VERSION L"2.2"
+#define UPDATE_COMPLETE (WM_APP + 2)
 
 #define APP_CLASS L"CopilotKeyBindingV2.Settings"
 #define SHARED_MUTEX L"Local\\CodexCopilotKeyBinding"
@@ -31,9 +36,13 @@
 #define ID_MORE 112
 #define ID_BACK 113
 #define ID_PROJECT 114
+#define ID_THEME_SYSTEM 115
+#define ID_THEME_LIGHT 116
+#define ID_THEME_DARK 117
+#define ID_UPDATE 118
 #define STOP_EVENT L"Local\\CopilotKeyBindingV2.Stop"
 
-typedef struct { BOOL claude; WCHAR executable[MAX_PATH]; BOOL chinese; } Settings;
+typedef struct { BOOL claude; WCHAR executable[MAX_PATH]; BOOL chinese; int theme; } Settings;
 typedef struct { BOOL exists; DWORD type, bytes; BYTE data[2048]; } StartupState;
 static const WCHAR codexTarget[] = L"shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App";
 static const WCHAR claudeTarget[] = L"shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude";
@@ -50,6 +59,8 @@ static BOOL statusError;
 static BOOL chinese, selectedClaude, darkTheme, micaEnabled, highContrast;
 static int themePreview = -1;
 static BOOL solidPreview;
+static int themeChoice;
+static int updateState; /* 0 idle, 1 checking, 2 current, 3 available, 4 failed */
 static HWND claudeButton;
 static COLORREF foregroundColor, mutedColor, cardColor, borderColor, accentColor, baseColor;
 static HTHEME textTheme;
@@ -61,7 +72,7 @@ typedef enum {
     TX_SAVE_FAILED, TX_STARTUP_FAILED, TX_ROLLBACK_OK, TX_ROLLBACK_FAILED,
     TX_SAVED_LEGACY, TX_SAVED, TX_LAUNCHED, TX_LAUNCH_FAILED, TX_START_FAILED,
     TX_START_REQUESTED, TX_STOP_REQUESTED, TX_LANGUAGE_FAILED,
-    TX_MORE, TX_LANGUAGE, TX_VERSION, TX_PROJECT, TX_BACK, TX_LINK_FAILED, TX_SAVE_DONE, TX_COUNT
+    TX_MORE, TX_LANGUAGE, TX_VERSION, TX_PROJECT, TX_BACK, TX_LINK_FAILED, TX_SAVE_DONE, TX_THEME, TX_SYSTEM, TX_LIGHT, TX_DARK, TX_THEME_FAILED, TX_UPDATE, TX_CHECKING, TX_CURRENT, TX_AVAILABLE, TX_UPDATE_FAILED, TX_DOWNLOAD, TX_UPDATE_HINT, TX_COUNT
 } TextId;
 static TextId currentStatus = TX_STOPPED;
 static const WCHAR *const messages[2][TX_COUNT] = {
@@ -87,7 +98,9 @@ static const WCHAR *const messages[2][TX_COUNT] = {
         L"Starting the mapper. You can close this window once it is running.",
         L"Stopping the mapper. The startup setting is unchanged.",
         L"Could not save the language selection.",
-        L"More", L"Language", L"Version", L"GitHub project ↗", L"Back", L"Could not open the project page.", L"Saved"
+        L"More", L"Language", L"Version", L"GitHub project ↗", L"Back", L"Could not open the project page.", L"Saved",
+        L"Appearance", L"System", L"Light", L"Dark", L"Could not save the theme.",
+        L"Check updates", L"Checking…", L"You are up to date.", L"An update is available.", L"Could not check. Try again.", L"Open the download page?", L"Get the latest version."
     },
     {
         L"Copilot 按键", L"选择按下按键后打开的应用。", L"打开应用",
@@ -111,7 +124,9 @@ static const WCHAR *const messages[2][TX_COUNT] = {
         L"正在启动映射，启动后可以关闭此窗口。",
         L"正在停止映射，开机启动设置保持不变。",
         L"无法保存语言选择。",
-        L"更多", L"界面语言", L"版本", L"GitHub 项目 ↗", L"返回", L"无法打开项目页面。", L"已保存"
+        L"更多", L"界面语言", L"版本", L"GitHub 项目 ↗", L"返回", L"无法打开项目页面。", L"已保存",
+        L"外观", L"跟随系统", L"浅色", L"深色", L"无法保存主题。",
+        L"检查更新", L"正在检查…", L"当前已是最新版本。", L"有新版本可用。", L"检查失败，请重试。", L"打开新版本下载页面？", L"获取最新版本。"
     }
 };
 static const WCHAR *tr(TextId id) { return messages[chinese ? 1 : 0][id]; }
@@ -156,6 +171,8 @@ static Settings loadSettings(const WCHAR *path)
     GetPrivateProfileStringW(L"Mapping", L"ClaudeExecutable", L"", settings.executable, MAX_PATH, path);
     GetPrivateProfileStringW(L"Interface", L"Language", L"", name, 24, path);
     settings.chinese = name[0] ? lstrcmpiW(name, L"zh-CN") == 0 : PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
+    settings.theme = GetPrivateProfileIntW(L"Interface", L"Theme", 0, path);
+    if (settings.theme < 0 || settings.theme > 2) settings.theme = 0;
     return settings;
 }
 static BOOL saveSettings(const WCHAR *path, const Settings *settings)
@@ -173,7 +190,8 @@ static BOOL saveSettings(const WCHAR *path, const Settings *settings)
     if (!headerSaved) { DeleteFileW(temporary); return FALSE; }
     if (!WritePrivateProfileStringW(L"Mapping", L"Target", settings->claude ? L"Claude" : L"Codex", temporary) ||
         !WritePrivateProfileStringW(L"Mapping", L"ClaudeExecutable", settings->executable, temporary) ||
-        !WritePrivateProfileStringW(L"Interface", L"Language", settings->chinese ? L"zh-CN" : L"en", temporary)) {
+        !WritePrivateProfileStringW(L"Interface", L"Language", settings->chinese ? L"zh-CN" : L"en", temporary) ||
+        !WritePrivateProfileStringW(L"Interface", L"Theme", settings->theme == 1 ? L"1" : settings->theme == 2 ? L"2" : L"0", temporary)) {
         DeleteFileW(temporary);
         return FALSE;
     }
@@ -371,6 +389,7 @@ static BOOL ensureMapper(void)
     }
     return TRUE;
 }
+#include "update.inc"
 #include "ui.inc"
 
 static int selfTest(void)
@@ -384,14 +403,14 @@ static int selfTest(void)
     if (!testDrawing()) ++failures;
     Settings original = {0};
     original.claude = TRUE;
-    original.chinese = TRUE;
+    original.chinese = TRUE; original.theme = 2;
     lstrcpyW(original.executable, L"C:\\Program Files\\Claude 测试\\claude.exe");
     if (!saveSettings(file, &original)) ++failures;
     Settings loaded = loadSettings(file);
-    if (!loaded.claude || !loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
+    if (loaded.theme != 2 || !loaded.claude || !loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
     if (!saveLanguage(file, FALSE)) ++failures;
     loaded = loadSettings(file);
-    if (!loaded.claude || loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
+    if (loaded.theme != 2 || !loaded.claude || loaded.chinese || lstrcmpW(original.executable, loaded.executable)) ++failures;
     original.claude = FALSE; original.executable[0] = 0;
     original.chinese = FALSE;
     if (!saveSettings(file, &original)) ++failures;
@@ -403,6 +422,19 @@ static int selfTest(void)
     for (int language = 0; language < 2; ++language)
         for (int text = 0; text < TX_COUNT; ++text)
             if (!messages[language][text] || (text != TX_LEGACY && !messages[language][text][0])) ++failures;
+    for (int theme = 0; theme < 3; ++theme) {
+        original.theme = theme;
+        if (!saveSettings(file, &original) || loadSettings(file).theme != theme) ++failures;
+    }
+    WritePrivateProfileStringW(L"Interface", L"Theme", L"99", file);
+    if (loadSettings(file).theme != 0) ++failures;
+    if (compareRelease("v2.1") != 1 || compareRelease("v2.2") != 1 ||
+        compareRelease("v2.3") != 2 || compareRelease("v2.10") != 2 ||
+        compareRelease("v2.2.1") != 2 || compareRelease("v3.0") != 2 ||
+        compareRelease("v2.3-beta") != 0 || compareRelease("broken") != 0) ++failures;
+    char tag[48];
+    if (!releaseTag("{\"body\":\"\\\"tag_name\\\":fake\",\"tag_name\":\"v2.3\"}", tag) || strcmp(tag, "v2.3")) ++failures;
+    if (releaseTag("{\"tag_name\":\"v2.3", tag)) ++failures;
     StartupState missing, present, removed;
     if (snapshotStartup(keyPath, &missing) != ERROR_SUCCESS || missing.exists) ++failures;
     if (setStartup(keyPath, TRUE) != ERROR_SUCCESS) ++failures;
@@ -441,6 +473,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR commandLine, i
     if (!preparePaths()) return 1;
     if (lstrcmpW(commandLine, L"--background") == 0) return runWorker(instance);
     if (lstrcmpW(commandLine, L"--self-test") == 0) return selfTest();
+    if (lstrcmpW(commandLine, L"--check-update") == 0) { int result = fetchUpdate(); printf("Update result: %d\n", result); return result ? 0 : 1; }
     if (lstrcmpW(commandLine, L"--diagnose-settings") == 0) return diagnoseSettings();
     if (lstrcmpW(commandLine, L"--preview-light") == 0) themePreview = 0;
     if (lstrcmpW(commandLine, L"--preview-solid") == 0) solidPreview = TRUE;

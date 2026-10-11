@@ -17,7 +17,7 @@ static void readPalette(void)
     HIGHCONTRASTW contrast = {sizeof(contrast), 0, NULL};
     SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
     highContrast = (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
-    darkTheme = !light;
+    darkTheme = themeChoice == 0 ? !light : themeChoice == 2;
     if (themePreview >= 0) darkTheme = themePreview != 0;
     baseColor = darkTheme ? RGB(32, 32, 32) : RGB(245, 245, 245);
     cardColor = darkTheme ? RGB(45, 45, 45) : RGB(255, 255, 255);
@@ -88,7 +88,7 @@ static void paintButtonContent(DRAWITEMSTRUCT *item)
     RECT r = item->rcItem;
     BOOL disabled = (item->itemState & ODS_DISABLED) != 0;
     BOOL pressed = (item->itemState & ODS_SELECTED) != 0;
-    BOOL onCard = item->CtlID == ID_CHINESE || item->CtlID == ID_ENGLISH;
+    BOOL onCard = item->CtlID == ID_CHINESE || item->CtlID == ID_ENGLISH || (item->CtlID >= ID_THEME_SYSTEM && item->CtlID <= ID_THEME_DARK) || item->CtlID == ID_UPDATE;
     FillRect(dc, &r, onCard ? whiteBrush : micaEnabled ? (HBRUSH)GetStockObject(BLACK_BRUSH) : backgroundBrush);
     if (buttonBuffer && (onCard || !micaEnabled)) BufferedPaintSetAlpha(buttonBuffer, NULL, 255);
     int width = r.right - r.left, height = r.bottom - r.top;
@@ -103,8 +103,9 @@ static void paintButtonContent(DRAWITEMSTRUCT *item)
     } else {
         BOOL app = item->CtlID == ID_TARGET || item->CtlID == ID_CLAUDE;
         BOOL language = item->CtlID == ID_CHINESE || item->CtlID == ID_ENGLISH;
+        BOOL theme = item->CtlID >= ID_THEME_SYSTEM && item->CtlID <= ID_THEME_DARK;
         BOOL selected = app ? ((item->CtlID == ID_CLAUDE) == selectedClaude) :
-            language && ((item->CtlID == ID_CHINESE) == chinese);
+            (language && ((item->CtlID == ID_CHINESE) == chinese)) || (theme && (int)item->CtlID - ID_THEME_SYSTEM == themeChoice);
         BOOL primary = item->CtlID == ID_SAVE;
         COLORREF fillColor = primary ? accentColor : selected ? (darkTheme ? RGB(48, 66, 87) : RGB(232, 240, 254)) : cardColor;
         if (pressed && !primary) fillColor = darkTheme ? RGB(65, 68, 75) : RGB(224, 229, 238);
@@ -160,6 +161,10 @@ static void translateControls(void)
     SetWindowTextW(GetDlgItem(window, ID_MORE), tr(TX_MORE));
     SetWindowTextW(GetDlgItem(window, ID_BACK), tr(TX_BACK));
     SetWindowTextW(GetDlgItem(window, ID_PROJECT), tr(TX_PROJECT));
+    SetWindowTextW(GetDlgItem(window, ID_THEME_SYSTEM), tr(TX_SYSTEM));
+    SetWindowTextW(GetDlgItem(window, ID_THEME_LIGHT), tr(TX_LIGHT));
+    SetWindowTextW(GetDlgItem(window, ID_THEME_DARK), tr(TX_DARK));
+    SetWindowTextW(GetDlgItem(window, ID_UPDATE), tr(updateState == 1 ? TX_CHECKING : TX_UPDATE));
     /* Leave the edit contents and unsaved target/startup choices intact. */
     setStatus(currentStatus, statusError);
     RedrawWindow(window, NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
@@ -174,13 +179,13 @@ static void changeLanguage(BOOL useChinese)
 static void showPage(BOOL showMore)
 {
     const int mainControls[] = {ID_TARGET, ID_CLAUDE, ID_SAVE, ID_MORE};
-    const int moreControls[] = {ID_CHINESE, ID_ENGLISH, ID_BACK, ID_PROJECT, ID_STARTUP};
+    const int moreControls[] = {ID_CHINESE, ID_ENGLISH, ID_BACK, ID_PROJECT, ID_STARTUP, ID_THEME_SYSTEM, ID_THEME_LIGHT, ID_THEME_DARK, ID_UPDATE};
     morePage = showMore;
     for (unsigned int i = 0; i < sizeof(mainControls) / sizeof(mainControls[0]); ++i)
         ShowWindow(GetDlgItem(window, mainControls[i]), showMore ? SW_HIDE : SW_SHOW);
     for (unsigned int i = 0; i < sizeof(moreControls) / sizeof(moreControls[0]); ++i)
         ShowWindow(GetDlgItem(window, moreControls[i]), showMore ? SW_SHOW : SW_HIDE);
-    RECT size = {0, 0, px(500), px(showMore ? 388 : 246)};
+    RECT size = {0, 0, px(500), px(showMore ? 540 : 246)};
     AdjustWindowRect(&size, (DWORD)GetWindowLongPtrW(window, GWL_STYLE), FALSE);
     SetWindowPos(window, NULL, 0, 0, size.right - size.left, size.bottom - size.top, SWP_NOMOVE | SWP_NOZORDER);
     SetFocus(GetDlgItem(window, showMore ? ID_BACK : ID_MORE));
@@ -200,14 +205,36 @@ static void changeStartup(void)
     startupEnabled = enable;
     InvalidateRect(startupButton, NULL, FALSE);
 }
-static void openProject(void)
+static void openPage(BOOL release)
 {
-    WCHAR application[MAX_PATH], command[MAX_PATH + 96];
+    WCHAR application[MAX_PATH], command[MAX_PATH + 128];
     UINT count = GetWindowsDirectoryW(application, MAX_PATH);
     if (!count || count + 14 >= MAX_PATH) return;
     lstrcatW(application, L"\\explorer.exe");
-    wsprintfW(command, L"\"%s\" https://github.com/Milorgs/CopilotKeyBinding", application);
+    wsprintfW(command, L"\"%s\" https://github.com/Milorgs/CopilotKeyBinding%s", application,
+        release ? L"/releases/latest" : L"");
     if (!createProcess(application, command)) MessageBoxW(window, tr(TX_LINK_FAILED), tr(TX_WINDOW), MB_OK | MB_ICONWARNING);
+}
+static void changeTheme(int choice)
+{
+    Settings settings = loadSettings(settingsPath);
+    settings.theme = choice;
+    if (!ensureConfigDirectory() || !saveSettings(settingsPath, &settings)) {
+        MessageBoxW(window, tr(TX_THEME_FAILED), tr(TX_WINDOW), MB_OK | MB_ICONWARNING); return;
+    }
+    themeChoice = choice; themePreview = -1;
+    readPalette(); applyMaterial();
+}
+static void checkUpdates(void)
+{
+    if (updateState == 1) return;
+    updateState = 1;
+    SetWindowTextW(GetDlgItem(window, ID_UPDATE), tr(TX_CHECKING));
+    EnableWindow(GetDlgItem(window, ID_UPDATE), FALSE);
+    InvalidateRect(window, NULL, FALSE);
+    HANDLE thread = CreateThread(NULL, 0, updateThread, window, 0, NULL);
+    if (thread) CloseHandle(thread);
+    else PostMessageW(window, UPDATE_COMPLETE, 0, 0);
 }
 static void paintContent(HDC dc, const RECT *client)
 {
@@ -216,12 +243,17 @@ static void paintContent(HDC dc, const RECT *client)
         drawText(dc, tr(TX_MORE), 76, 20, 330, 36, titleFont, foregroundColor);
         panel(dc, 24, 90, 452, 64, cardColor, borderColor);
         drawText(dc, tr(TX_LANGUAGE), 40, 111, 180, 24, labelFont, foregroundColor);
-        panel(dc, 24, 170, 452, 74, cardColor, borderColor);
-        drawText(dc, tr(TX_STARTUP), 40, 184, 348, 24, labelFont, foregroundColor);
-        drawText(dc, tr(TX_STARTUP_HINT), 40, 213, 358, 20, smallFont, mutedColor);
-        panel(dc, 24, 260, 452, 52, cardColor, borderColor);
-        drawText(dc, tr(TX_VERSION), 40, 275, 260, 24, labelFont, foregroundColor);
-        drawText(dc, L"2.1", 414, 275, 50, 24, bodyFont, mutedColor);
+        panel(dc, 24, 170, 452, 96, cardColor, borderColor);
+        drawText(dc, tr(TX_THEME), 40, 185, 400, 24, labelFont, foregroundColor);
+        panel(dc, 24, 282, 452, 74, cardColor, borderColor);
+        drawText(dc, tr(TX_STARTUP), 40, 296, 348, 24, labelFont, foregroundColor);
+        drawText(dc, tr(TX_STARTUP_HINT), 40, 325, 358, 20, smallFont, mutedColor);
+        panel(dc, 24, 372, 452, 92, cardColor, borderColor);
+        drawText(dc, tr(TX_VERSION), 40, 387, 260, 24, labelFont, foregroundColor);
+        drawText(dc, APP_VERSION, 414, 387, 50, 24, bodyFont, mutedColor);
+        TextId updateText = updateState == 1 ? TX_CHECKING : updateState == 2 ? TX_CURRENT :
+            updateState == 3 ? TX_AVAILABLE : updateState == 4 ? TX_UPDATE_FAILED : TX_UPDATE_HINT;
+        drawText(dc, tr(updateText), 40, 427, 285, 22, smallFont, updateState == 4 ? accentColor : mutedColor);
         return;
     }
     drawText(dc, tr(TX_TITLE), 24, 20, 310, 36, titleFont, foregroundColor);
@@ -233,7 +265,8 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
     case WM_CREATE: {
         window = hwnd;
         Settings settings = loadSettings(settingsPath);
-        chinese = settings.chinese; selectedClaude = settings.claude;
+        chinese = settings.chinese; selectedClaude = settings.claude; themeChoice = settings.theme;
+        readPalette();
         StartupState startup;
         startupEnabled = snapshotStartup(STARTUP_KEY, &startup) == ERROR_SUCCESS && startup.exists;
         targetBox = control(L"BUTTON", L"Codex", BS_OWNERDRAW | WS_TABSTOP, 24, 104, 218, 54, ID_TARGET);
@@ -242,9 +275,13 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
         control(L"BUTTON", tr(TX_BACK), BS_OWNERDRAW | WS_TABSTOP, 24, 24, 36, 30, ID_BACK);
         control(L"BUTTON", L"中文", BS_OWNERDRAW | WS_TABSTOP, 240, 106, 98, 32, ID_CHINESE);
         control(L"BUTTON", L"English", BS_OWNERDRAW | WS_TABSTOP, 350, 106, 110, 32, ID_ENGLISH);
-        control(L"BUTTON", tr(TX_PROJECT), BS_OWNERDRAW | WS_TABSTOP, 24, 328, 452, 36, ID_PROJECT);
-        startupButton = control(L"BUTTON", tr(TX_STARTUP), BS_OWNERDRAW | WS_TABSTOP, 414, 186, 46, 28, ID_STARTUP);
+        control(L"BUTTON", tr(TX_PROJECT), BS_OWNERDRAW | WS_TABSTOP, 24, 480, 452, 36, ID_PROJECT);
+        startupButton = control(L"BUTTON", tr(TX_STARTUP), BS_OWNERDRAW | WS_TABSTOP, 414, 298, 46, 28, ID_STARTUP);
         control(L"BUTTON", tr(TX_SAVE), BS_OWNERDRAW | WS_TABSTOP, 24, 186, 452, 36, ID_SAVE);
+        control(L"BUTTON", tr(TX_SYSTEM), BS_OWNERDRAW | WS_TABSTOP, 40, 222, 132, 30, ID_THEME_SYSTEM);
+        control(L"BUTTON", tr(TX_LIGHT), BS_OWNERDRAW | WS_TABSTOP, 184, 222, 132, 30, ID_THEME_LIGHT);
+        control(L"BUTTON", tr(TX_DARK), BS_OWNERDRAW | WS_TABSTOP, 328, 222, 132, 30, ID_THEME_DARK);
+        control(L"BUTTON", tr(TX_UPDATE), BS_OWNERDRAW | WS_TABSTOP, 330, 418, 130, 30, ID_UPDATE);
         SetWindowTextW(window, tr(TX_WINDOW));
         showPage(FALSE);
         return 0;
@@ -253,7 +290,7 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
         switch (LOWORD(wParam)) {
         case ID_MORE: showPage(TRUE); return 0;
         case ID_BACK: showPage(FALSE); return 0;
-        case ID_PROJECT: openProject(); return 0;
+        case ID_PROJECT: openPage(FALSE); return 0;
         case ID_TARGET:
         case ID_CLAUDE:
             selectedClaude = LOWORD(wParam) == ID_CLAUDE;
@@ -261,6 +298,9 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
             return 0;
         case ID_CHINESE: changeLanguage(TRUE); return 0;
         case ID_ENGLISH: changeLanguage(FALSE); return 0;
+        case ID_THEME_SYSTEM: case ID_THEME_LIGHT: case ID_THEME_DARK:
+            changeTheme(LOWORD(wParam) - ID_THEME_SYSTEM); return 0;
+        case ID_UPDATE: checkUpdates(); return 0;
         case ID_STARTUP: changeStartup(); return 0;
         case ID_SAVE:
             if (!applySettings() || !ensureMapper()) MessageBoxW(window, tr(currentStatus), tr(TX_WINDOW), MB_OK | MB_ICONWARNING);
@@ -268,6 +308,13 @@ static LRESULT CALLBACK windowProcedure(HWND hwnd, UINT message, WPARAM wParam, 
             return 0;
         }
         break;
+    case UPDATE_COMPLETE:
+        updateState = wParam == 2 ? 3 : wParam == 1 ? 2 : 4;
+        EnableWindow(GetDlgItem(window, ID_UPDATE), TRUE);
+        SetWindowTextW(GetDlgItem(window, ID_UPDATE), tr(TX_UPDATE));
+        InvalidateRect(window, NULL, FALSE);
+        if (wParam == 2 && MessageBoxW(window, tr(TX_DOWNLOAD), tr(TX_AVAILABLE), MB_YESNO | MB_ICONINFORMATION) == IDYES) openPage(TRUE);
+        return 0;
     case WM_TIMER:
         if (wParam == 2) { KillTimer(window, 2); SetWindowTextW(GetDlgItem(window, ID_SAVE), tr(TX_SAVE)); return 0; }
         return 0;
@@ -337,7 +384,7 @@ static int showSettings(HINSTANCE instance, int show)
     RECT rectangle = {0, 0, px(500), px(246)};
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     AdjustWindowRect(&rectangle, style, FALSE);
-    window = CreateWindowExW(0, APP_CLASS, L"Copilot Key Binding 2.1", style,
+    window = CreateWindowExW(0, APP_CLASS, L"Copilot Key Binding 2.2", style,
         CW_USEDEFAULT, CW_USEDEFAULT, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top,
         NULL, NULL, instance, NULL);
     if (!window) { CloseHandle(mutex); return 1; }
