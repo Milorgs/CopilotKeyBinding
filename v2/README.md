@@ -33,7 +33,7 @@ There are no separate launch, start, or stop buttons. To stop mapping, end the b
 
 Open **More** with the `•••` button. Language, appearance, and startup changes are saved immediately and separately from the selected app. Turning startup off affects the next sign-in, not the current background process. The initial language follows Windows when no preference is saved. System appearance tracks Windows theme changes; explicit Light or Dark stays selected. Windows high-contrast colors take priority.
 
-If 1.0 is running, **Save** stores the new settings but does not take over the key. Before switching versions, stop 1.0 and remove its startup shortcut yourself. Startup is blocked while another mapper is running.
+Before upgrading, exit the old mapper and disable its startup entry. Only one mapper can own the key at a time.
 
 ## Supported apps
 
@@ -85,3 +85,75 @@ Checked on Windows:
 - The background process exits with code 2 when the 1.0 mapper is already running.
 
 Only one version should own the key at a time. The 2.x keyboard hook has not been exercised alongside 1.0.
+
+---
+
+# 中文说明：2.2
+
+一个简洁的 Copilot 按键设置窗口，支持选择 Codex 或 Claude、开机自启动和中英文切换。
+
+## 功能
+
+- “更多 → 外观”：跟随系统、浅色、深色；立即生效并记住选择，已有配置默认跟随系统。
+- “更多 → 检查更新”：按需通过 HTTPS 查询 GitHub 最新正式版，有新版时可打开下载页，失败后可重试。
+- 跟随系统时响应 Windows 主题变化；手动选择浅色或深色时保持选择，高对比度配色优先。
+- Windows 11 Mica 背景，平滑圆角控件和圆形自启动开关。
+- 鼠标点击不额外显示焦点框，Tab 导航保留键盘焦点提示。
+- Copilot 按键风格图标内置于 EXE，包含 16～256 像素尺寸。
+- 主界面提供 Codex、Claude 两个选项和一个“保存”按钮；其余设置、版本和 GitHub 链接位于“更多”。
+- 不提供自定义 Claude 路径或常驻状态面板。
+
+Mica 需要 Windows 11 build 22621 或更新版本。系统不支持、关闭透明效果或启用高对比度时，使用纯色背景。
+
+## 使用
+
+1. 下载 `CopilotKey22.exe`，放在固定目录后运行。
+2. 选择 Codex 或 Claude，点击“保存”。没有其他映射程序运行时，后台映射会自动启动。
+3. 设置完成后关闭窗口，后台映射继续运行。
+
+只需一个 EXE，设置窗口、后台映射、图标和两种语言全部内置，无需安装器、附带 DLL 或额外运行库。设置和日志自动写入用户目录，无需 EXE 所在目录可写。开启自启动后请保持 EXE 路径不变；移动后，在新位置将自启动关闭再开启。
+
+通过 `•••` 打开“更多”。语言、外观和自启动设置立即保存，不影响尚未保存的应用选择。关闭自启动影响下次登录，不会停止当前后台进程。没有语言偏好时，默认跟随 Windows 界面语言。
+
+升级前请先退出旧版映射程序并关闭其启动项，确保同一时间只运行一个版本。需要停止映射时，在任务管理器中结束后台 `CopilotKey22.exe` 进程。
+
+## 支持的应用
+
+- Codex 打包应用：`OpenAI.Codex_2p2nqsd0c76g0!App`。
+- Claude 打包应用：`Claude_pzs8sxrjxfjjc!Claude`。
+
+仅支持上述打包安装形式。应用需事先安装，键盘需发送 `Win + Shift + F23`。
+
+## 设置与运行
+
+设置文件：`%LOCALAPPDATA%\CopilotKeyBinding\v2\settings.ini`。
+
+自启动项位于当前用户 Windows `Run` 注册表键，名称为 `CopilotKeyBindingV2`，运行命令为 `CopilotKey22.exe --background`。
+
+仅打开设置窗口不会启用映射或自启动。应用选择点击“保存”后生效；后台映射已运行时，下次按 Copilot 键使用新的选择。
+
+后台程序按事件等待，只在 `status.log` 中记录启动和错误，不记录普通按键或输入文字。“已保存”反馈使用短暂定时器，无持续空闲轮询。
+
+更新检查在独立线程中执行，窗口保持可操作。不会自动检查、下载或安装更新。`--check-update` 可用于手动联网诊断。
+
+## 资源占用
+
+渲染器复用原始分辨率位图，仅在曲线边缘做抗锯齿采样，不加载 GDI+，不创建大型临时超采样图像。
+
+以下为此前 2.1 渲染器的数据：一台 Windows 电脑上的主窗口工作集约为 15.4 MB，私有内存约为 2.06 MB；优化前分别约为 16.7 MB 和 2.76 MB。连续重绘“更多”页面 30 次的 CPU 时间由约 0.59 秒降至 0.17 秒。两个版本在空闲 3 秒样本内均未测到 CPU 时间增加。实际占用因设备和运行状态而异。
+
+## 构建与验证
+
+在对应版本的源码目录安装 MinGW-w64 GCC/G++ 后执行：
+
+```powershell
+.\v2\build.ps1
+# 或指定编译器：
+.\v2\build.ps1 -Compiler 'C:\mingw64\bin\gcc.exe'
+```
+
+输出为 `v2/dist/CopilotKey22.exe`，运行只依赖 Windows 系统组件。图标源码及来源说明在源码包的 `v2/assets` 中，可通过 `make-icon.ps1` 重建图标。
+
+`--self-test` 检查主题、语言、应用选择保存、版本解析、绘图和启动项，使用临时 INI 文件和独立测试注册表键，不修改真实启动项。
+
+已验证主题切换与保存、实际联网检查、应用选择、语言保存、自启动控件和页面交互；打包安装的 Claude 可以正常打开。多个映射版本的并行运行不在验证范围内。
