@@ -107,6 +107,40 @@ extern "C" void smoothCircle(HDC destination, int x, int y, int diameter, COLORR
 {
     drawSurface(destination, x, y, diameter, diameter, diameter / 2, fillColor, fillColor, 0, true);
 }
+static float segmentDistance(float x, float y, float ax, float ay, float bx, float by)
+{
+    float dx = bx - ax, dy = by - ay;
+    float t = maximum(0.0f, minimum(1.0f, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+    dx = x - ax - t * dx; dy = y - ay - t * dy;
+    return std::sqrt(dx * dx + dy * dy);
+}
+extern "C" void smoothArrow(HDC destination, int x, int y, int size, COLORREF color, int diagonal)
+{
+    if (size <= 0 || !ensureSurface(size, size)) return;
+    const float segments[2][3][4] = {
+        {{3,9,15,9}, {3,9,8,4}, {3,9,8,14}},
+        {{4,14,14,4}, {6,4,14,4}, {14,4,14,12}}
+    };
+    for (int row = 0; row < size; ++row) for (int column = 0; column < size; ++column) {
+        unsigned int hits = 0;
+        for (int sy = 0; sy < 8; ++sy) for (int sx = 0; sx < 8; ++sx) {
+            float sampleX = (column + (sx + 0.5f) / 8) * 18 / size;
+            float sampleY = (row + (sy + 0.5f) / 8) * 18 / size;
+            float distance = 100;
+            for (int line = 0; line < 3; ++line) {
+                const float *s = segments[diagonal ? 1 : 0][line];
+                distance = minimum(distance, segmentDistance(sampleX, sampleY, s[0], s[1], s[2], s[3]));
+            }
+            if (distance <= 1.0f) ++hits;
+        }
+        surfaceBits[row * surfaceWidth + column] = (((hits * 255 + 32) / 64) << 24) |
+            (((hits * GetRValue(color) + 32) / 64) << 16) |
+            (((hits * GetGValue(color) + 32) / 64) << 8) | ((hits * GetBValue(color) + 32) / 64);
+    }
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(destination, x, y, size, size, sourceDc, 0, 0, size, size, blend);
+    GdiFlush();
+}
 extern "C" int testDrawing(void)
 {
     DWORD before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);

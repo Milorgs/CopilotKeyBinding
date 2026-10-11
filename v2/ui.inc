@@ -7,6 +7,7 @@ extern int initDrawing(void);
 extern void closeDrawing(void);
 extern void smoothRoundRect(HDC, int, int, int, int, int, COLORREF, COLORREF, int);
 extern void smoothCircle(HDC, int, int, int, COLORREF);
+extern void smoothArrow(HDC, int, int, int, COLORREF, int);
 extern int testDrawing(void);
 
 static void readPalette(void)
@@ -116,14 +117,24 @@ static void paintButtonContent(DRAWITEMSTRUCT *item)
         WCHAR text[48];
         GetWindowTextW(item->hwndItem, text, 48);
         if (item->CtlID == ID_MORE) lstrcpyW(text, L"•••");
-        if (item->CtlID == ID_BACK) lstrcpyW(text, L"←");
         SelectObject(dc, app ? labelFont : bodyFont);
         SetBkMode(dc, TRANSPARENT);
         COLORREF textColor = disabled ? mutedColor : primary ? (darkTheme ? RGB(15, 32, 52) : RGB(255, 255, 255)) : foregroundColor;
         if (highContrast) textColor = disabled ? GetSysColor(COLOR_GRAYTEXT) :
             primary || selected ? GetSysColor(COLOR_HIGHLIGHTTEXT) : foregroundColor;
         SetTextColor(dc, textColor);
-        DrawTextW(dc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (item->CtlID == ID_BACK) {
+            smoothArrow(dc, (width - px(18)) / 2, (height - px(18)) / 2, px(18), textColor, FALSE);
+        } else if (item->CtlID == ID_PROJECT) {
+            SIZE textSize;
+            GetTextExtentPoint32W(dc, text, lstrlenW(text), &textSize);
+            int left = (width - textSize.cx - px(26)) / 2;
+            RECT label = {left, 0, left + textSize.cx, height};
+            DrawTextW(dc, text, -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            smoothArrow(dc, left + textSize.cx + px(8), (height - px(18)) / 2, px(18), textColor, TRUE);
+        } else {
+            DrawTextW(dc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
     }
     if (keyboardNavigation && (item->itemState & ODS_FOCUS) && !(item->itemState & ODS_NOFOCUSRECT)) {
         smoothRoundRect(dc, r.left + px(5), r.top + px(5), width - px(10), height - px(10),

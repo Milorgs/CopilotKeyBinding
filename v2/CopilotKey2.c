@@ -98,7 +98,7 @@ static const WCHAR *const messages[2][TX_COUNT] = {
         L"Starting the mapper. You can close this window once it is running.",
         L"Stopping the mapper. The startup setting is unchanged.",
         L"Could not save the language selection.",
-        L"More", L"Language", L"Version", L"GitHub project ↗", L"Back", L"Could not open the project page.", L"Saved",
+        L"More", L"Language", L"Version", L"GitHub project", L"Back", L"Could not open the project page.", L"Saved",
         L"Appearance", L"System", L"Light", L"Dark", L"Could not save the theme.",
         L"Check updates", L"Checking…", L"You are up to date.", L"An update is available.", L"Could not check. Try again.", L"Open the download page?", L"Get the latest version."
     },
@@ -124,7 +124,7 @@ static const WCHAR *const messages[2][TX_COUNT] = {
         L"正在启动映射，启动后可以关闭此窗口。",
         L"正在停止映射，开机启动设置保持不变。",
         L"无法保存语言选择。",
-        L"更多", L"界面语言", L"版本", L"GitHub 项目 ↗", L"返回", L"无法打开项目页面。", L"已保存",
+        L"更多", L"界面语言", L"版本", L"GitHub 项目", L"返回", L"无法打开项目页面。", L"已保存",
         L"外观", L"跟随系统", L"浅色", L"深色", L"无法保存主题。",
         L"检查更新", L"正在检查…", L"当前已是最新版本。", L"有新版本可用。", L"检查失败，请重试。", L"打开新版本下载页面？", L"获取最新版本。"
     }
